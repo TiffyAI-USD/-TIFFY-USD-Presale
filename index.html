@@ -138,9 +138,9 @@
       <button id="buyBtn" class="btn buy">Create Invoice</button>
     </div>
 
-    <div id="amountDisplay">Loading live price...</div>
+    <div id="amountDisplay">Loading price...</div>
     <div id="usdDisplay">≈ $1.00 USD per token</div>
-    <div class="muted">Tokens issued instantly after payment confirmation.</div>
+    <div class="muted">Tokens issued instantly after payment.</div>
   </div>
 
   <!-- INVOICE MODAL -->
@@ -240,7 +240,7 @@ function getBnbPerToken() {
   return (1 / bnbPrice).toFixed(8);
 }
 
-// === UPDATE DISPLAY ===
+// === UPDATE DISPLAY (NO TEMPLATES!) ===
 function updateAmount() {
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
   const cur = currencyEl.value;
@@ -252,22 +252,22 @@ function updateAmount() {
   if (cur === 'BNB') {
     totalCrypto = qty * bnbPerToken;
     fmtCrypto = totalCrypto.toFixed(6);
-    pricePerToken = `${bnbPerToken} BNB`;
+    pricePerToken = bnbPerToken + ' BNB';
   } else if (cur === 'USDT') {
     totalCrypto = qty * 1.0;
     fmtCrypto = totalCrypto.toFixed(2);
-    pricePerToken = `1.00 USDT`;
+    pricePerToken = '1.00 USDT';
   } else if (cur === 'BTCB') {
     totalCrypto = (qty * 1.0) / prices.BTC;
     fmtCrypto = totalCrypto.toFixed(8);
-    pricePerToken = `${(1/prices.BTC).toFixed(8)} BTCB`;
+    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
   }
 
-  amountDisplay.innerText = `Total: \( {fmtCrypto} \){cur}`;
-  usdDisplay.innerText = `≈ $${(qty * 1).toFixed(2)} USD (1 TIFFY = $1.00)`;
+  amountDisplay.textContent = 'Total: ' + fmtCrypto + ' ' + cur;
+  usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === CONNECT WALLET (MetaMask + Trust Wallet + WalletConnect) ===
+// === CONNECT WALLET ===
 connectBtn.addEventListener('click', async () => {
   if (window.ethereum) {
     try {
@@ -296,9 +296,9 @@ function initWeb3(_provider) {
   web3 = new Web3(_provider);
   web3.eth.getAccounts().then(accounts => {
     userAddress = accounts[0];
-    addrDisplay.innerText = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
-    statusSmall.innerText = 'BNB Chain';
-    connectBtn.innerText = 'BNB Chain';
+    addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
+    statusSmall.textContent = 'BNB Chain';
+    connectBtn.textContent = 'BNB Chain';
     ensureChain();
   });
 }
@@ -335,32 +335,31 @@ buyBtn.addEventListener('click', async () => {
 
   if (currency === 'BNB') {
     amount = (qty * bnbPerToken).toFixed(6);
-    pricePerToken = `${bnbPerToken} BNB`;
+    pricePerToken = bnbPerToken + ' BNB';
   } else if (currency === 'USDT') {
     amount = (qty * 1.0).toFixed(2);
-    pricePerToken = `1.00 USDT`;
+    pricePerToken = '1.00 USDT';
   } else if (currency === 'BTCB') {
     amount = ((qty * 1.0) / prices.BTC).toFixed(8);
-    pricePerToken = `${(1/prices.BTC).toFixed(8)} BTCB`;
+    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
   }
 
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
   const qrData = currency === 'BNB'
-    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}&token=BNB`
-    : `\( {PRESALE_WALLET}?amount= \){amount}&currency=${currency}`;
+    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}`
+    : `\( {PRESALE_WALLET}?amount= \){amount}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
 
-  // Fill invoice
-  payAddress.innerText = PRESALE_WALLET;
-  modalCurrency.innerText = currency;
-  invQty.innerText = qty + ' TIFFY';
-  invPrice.innerText = pricePerToken;
-  invTotal.innerText = `\( {amount} \){currency}`;
-  modalExpires.innerText = expiresAt.toLocaleString();
+  payAddress.textContent = PRESALE_WALLET;
+  modalCurrency.textContent = currency;
+  invQty.textContent = qty + ' TIFFY';
+  invPrice.textContent = pricePerToken;
+  invTotal.textContent = amount + ' ' + currency;
+  modalExpires.textContent = expiresAt.toLocaleString();
   qrPlaceholder.innerHTML = `<img src="${qrUrl}" alt="Scan to Pay">`;
 
   payModal.classList.add('show');
-  statusSmall.innerText = 'Invoice ready';
+  statusSmall.textContent = 'Invoice ready';
 
   pollForPayment(PRESALE_WALLET, amount, currency);
 });
@@ -368,23 +367,23 @@ buyBtn.addEventListener('click', async () => {
 // === COPY BUTTONS ===
 copyAddr.onclick = () => {
   navigator.clipboard.writeText(PRESALE_WALLET);
-  copyAddr.innerText = 'Copied!';
-  setTimeout(() => copyAddr.innerText = 'Copy Wallet Address', 1500);
+  copyAddr.textContent = 'Copied!';
+  setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500);
 };
 
 copyAmount.onclick = () => {
-  const amt = invTotal.innerText.split(' ')[0];
+  const amt = invTotal.textContent.split(' ')[0];
   navigator.clipboard.writeText(amt);
-  copyAmount.innerText = 'Copied!';
-  setTimeout(() => copyAmount.innerText = 'Copy Amount', 1500);
+  copyAmount.textContent = 'Copied!';
+  setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500);
 };
 
 // === PAY WITH WALLET (BNB only) ===
 payWithWallet.onclick = async () => {
   if (!provider || !userAddress) return alert('Connect wallet');
-  if (modalCurrency.innerText !== 'BNB') return alert('Use manual send for USDT/BTCB');
+  if (modalCurrency.textContent !== 'BNB') return alert('Use manual send for USDT/BTCB');
 
-  const amount = invTotal.innerText.split(' ')[0];
+  const amount = invTotal.textContent.split(' ')[0];
   const wei = web3.utils.toWei(amount, 'ether');
 
   try {
@@ -424,7 +423,7 @@ submitTx.onclick = async () => {
 
 // === POLL FOR PAYMENT (BNB only) ===
 async function pollForPayment(address, amountStr, currency) {
-  if (currency !== 'BNB') return; // USDT/BTCB use TX submit
+  if (currency !== 'BNB') return;
   const target = parseFloat(amountStr);
   const interval = setInterval(async () => {
     try {
@@ -432,7 +431,7 @@ async function pollForPayment(address, amountStr, currency) {
       const balBNB = parseFloat(web3.utils.fromWei(bal, 'ether'));
       if (balBNB >= target) {
         clearInterval(interval);
-        statusSmall.innerText = 'Payment detected!';
+        statusSmall.textContent = 'Payment detected!';
         await fetch(API_BASE + '/reward', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -446,7 +445,7 @@ async function pollForPayment(address, amountStr, currency) {
   }, 8000);
 }
 
-// === CLOSE MODAL ON CLICK OUTSIDE ===
+// === CLOSE MODAL ===
 window.onclick = (e) => {
   if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) {
     payModal.classList.remove('show');
@@ -457,8 +456,7 @@ window.onclick = (e) => {
 currencyEl.addEventListener('change', updateAmount);
 qtyEl.addEventListener('input', updateAmount);
 fetchPrices();
-setInterval(fetchPrices, 30000); // Refresh price every 30s
-
+setInterval(fetchPrices, 30000);
 </script>
 </body>
 </html>
