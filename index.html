@@ -1,9 +1,10 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>TiffyAI Presale — Checkout</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
   <style>
     :root {
       --accent1: #00f0ff;
@@ -159,6 +160,7 @@
 const API_BASE = 'https://tiffyai-wh-wa.onrender.com'; // << YOUR SERVER here
 
 let userAddress = null;
+let web3 = null;
 
 // UI elements
 const connectBtn = document.getElementById('connectBtn');
@@ -183,39 +185,67 @@ const submitTx = document.getElementById('submitTx');
 function updateAmount() {
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
   const cur = currencyEl.value;
-  // prices: 0.001 BNB per token, USDT 1 per token, BTCB approx
   const prices = { BNB: 0.001, USDT: 1.0, BTCB: 0.000014 };
-  const total = (qty * (prices[cur]||0));
-  const fmt = (cur === 'USDT') ? total.toFixed(2) : total.toFixed(6);
-  amountDisplay.innerText = `Total: ${fmt} ${cur}`;
+  const total = qty * (prices[cur] || 0);
+  const fmt = cur === 'USDT' ? total.toFixed(2) : total.toFixed(6);
+  amountDisplay.innerText = `Total: \( {fmt} \){cur}`;
 }
 currencyEl.addEventListener('change', updateAmount);
 qtyEl.addEventListener('input', updateAmount);
 updateAmount();
 
-/* Wallet connection: read-only to get user address */
+/* Wallet connection + BSC auto-switch */
 connectBtn.addEventListener('click', async () => {
   if (typeof window.ethereum === 'undefined') {
-    alert('Please install MetaMask or a Web3 wallet to connect.');
+    alert('Please install MetaMask or a Web3 wallet.');
     return;
   }
+
   try {
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    web3 = new Web3(window.ethereum);
+    const accounts = await web3.eth.getAccounts();
     userAddress = accounts[0];
-    addrDisplay.innerText = `Connected: ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`;
+
+    // Auto-switch to BSC
+    const chainId = await web3.eth.getChainId();
+    if (chainId !== 56) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x38' }]
+        });
+      } catch (switchError) {
+        if (switchError.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x38',
+              chainName: 'BNB Smart Chain',
+              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+              rpcUrls: ['https://bsc-dataseed.binance.org/'],
+              blockExplorerUrls: ['https://bscscan.com']
+            }]
+          });
+        } else {
+          throw switchError;
+        }
+      }
+    }
+
+    addrDisplay.innerText = `Connected: \( {userAddress.slice(0,6)}... \){userAddress.slice(-4)}`;
     statusSmall.innerText = 'Wallet connected';
     connectBtn.innerText = 'Connected';
   } catch (e) {
     console.error(e);
-    alert('Wallet connect canceled.');
+    alert('Wallet connection failed: ' + (e.message || 'Unknown error'));
   }
 });
 
-/* Create invoice & show modal */
+/* Create invoice */
 buyBtn.addEventListener('click', async () => {
-  // require user address for attribution (optional but recommended)
   if (!userAddress) {
-    const ok = confirm('Connect wallet to continue? (we only read address)');
+    const ok = confirm('Connect wallet first?');
     if (!ok) return;
     await connectBtn.click();
     if (!userAddress) return;
@@ -224,122 +254,117 @@ buyBtn.addEventListener('click', async () => {
   const currency = currencyEl.value;
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
 
-  // Call your backend to create an invoice
   try {
     statusSmall.innerText = 'Creating invoice...';
+    buyBtn.disabled = true;
+
     const resp = await fetch(`${API_BASE}/create-invoice`, {
       method: 'POST',
-      headers: { 'Content-Type':'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ wallet: userAddress, currency, qty })
     });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.message || 'Failed creating invoice');
+
+    let data;
+    try {
+      data = await resp.json();
+    } catch (jsonError) {
+      const text = await resp.text();
+      console.error('Invalid JSON:', text);
+      throw new Error('Server returned invalid response (not JSON)');
+    }
+
+    if (!resp.ok) throw new Error(data.message || `HTTP ${resp.status}`);
 
     openPaymentModal(data);
-    // start polling invoice status (every 6s)
     pollInvoiceStatus(data.invoiceId);
   } catch (err) {
     console.error(err);
-    alert('Invoice creation failed: ' + (err.message || err));
+    alert('Invoice failed: ' + (err.message || 'Unknown error'));
     statusSmall.innerText = 'Invoice error';
+  } finally {
+    buyBtn.disabled = false;
   }
 });
 
-/* Populate modal from invoice */
+/* Open modal with invoice data */
 function openPaymentModal(invoice) {
   payModal.classList.add('show');
   modalCurrency.innerText = invoice.currency;
   payAddress.innerText = invoice.payToAddress;
-  payAmount.innerText = `Amount: ${invoice.amount} ${invoice.currency}`;
-  modalExpires.innerText = `Expires at ${new Date(invoice.expiresAt).toLocaleString()}`;
-  qrPlaceholder.innerText = invoice.qr || 'QR';
-  statusSmall.innerText = 'Invoice created';
-  // store invoice id on modal element
+  payAmount.innerText = `Amount: \( {invoice.amount} \){invoice.currency}`;
+  modalExpires.innerText = `Expires: ${new Date(invoice.expiresAt).toLocaleString()}`;
+  qrPlaceholder.innerHTML = invoice.qr ? `<img src="${invoice.qr}" style="width:100%;height:100%;border-radius:8px;">` : 'QR';
+  statusSmall.innerText = 'Invoice ready';
   payModal.dataset.invoiceId = invoice.invoiceId;
 }
 
-/* Copy helpers */
+/* Copy buttons */
 copyAddr.addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(payAddress.innerText); copyAddr.innerText = 'Copied'; setTimeout(()=>copyAddr.innerText='Copy address',1200); } catch(e){alert('Copy failed');}
-});
-copyAmount.addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(payAmount.innerText.replace('Amount: ','').trim()); copyAmount.innerText = 'Copied'; setTimeout(()=>copyAmount.innerText='Copy amount',1200); } catch(e){alert('Copy failed');}
+  await navigator.clipboard.writeText(payAddress.innerText);
+  copyAddr.innerText = 'Copied!';
+  setTimeout(() => copyAddr.innerText = 'Copy address', 1500);
 });
 
-/* Submit TX hash manually (optional) */
+copyAmount.addEventListener('click', async () => {
+  const amount = payAmount.innerText.split(' ')[1];
+  await navigator.clipboard.writeText(amount);
+  copyAmount.innerText = 'Copied!';
+  setTimeout(() => copyAmount.innerText = 'Copy amount', 1500);
+});
+
+/* Manual TX submit */
 submitTx.addEventListener('click', async () => {
   const invoiceId = payModal.dataset.invoiceId;
   const txHash = txHashInput.value.trim();
-  if (!txHash) { alert('Paste transaction hash first'); return; }
-  statusSmall.innerText = 'Submitting tx...';
+  if (!txHash) return alert('Enter TX hash');
+
   try {
-    const resp = await fetch(`${API_BASE}/invoice/${invoiceId}/submit-tx`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ txHash })});
+    statusSmall.innerText = 'Submitting...';
+    const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}/submit-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txHash })
+    });
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.message || 'submit failed');
-    alert('TX submitted — verification in progress');
-    statusSmall.innerText = 'Submitted tx';
+    if (!resp.ok) throw new Error(data.message || 'Failed');
+    alert('TX submitted');
   } catch (err) {
-    console.error(err);
-    alert('Submit failed: '+err.message);
-    statusSmall.innerText = 'Submit failed';
+    alert('Submit failed: ' + err.message);
   }
 });
 
-/* Poll invoice status until rewarded or expired */
-let polling = {};
+/* Poll status */
+const polling = {};
 function pollInvoiceStatus(invoiceId) {
   if (polling[invoiceId]) return;
   polling[invoiceId] = setInterval(async () => {
     try {
-      const resp = await fetch(`${API_BASE}/invoice/${invoiceId}`);
+      const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}`);
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.message || 'status error');
+      if (!resp.ok) throw new Error(data.message || 'Poll error');
 
-      // possible statuses: pending | paid | rewarded | expired | failed
-      statusSmall.innerText = `Invoice: ${data.status}`;
+      statusSmall.innerText = `Status: ${data.status}`;
       if (data.status === 'paid') {
-        statusSmall.innerText = 'Payment received — requesting reward';
-        // request reward (your server may auto-reward itself when it detects incoming payment; this is optional)
-        await triggerReward(invoiceId, data);
+        statusSmall.innerText = 'Rewarding...';
       } else if (data.status === 'rewarded') {
-        clearInterval(polling[invoiceId]); delete polling[invoiceId];
-        alert('Payment confirmed — your tokens are issued. Redirecting...');
-        window.location.href = '/Blue-Key-Claim';
-      } else if (data.status === 'expired' || data.status === 'failed') {
-        clearInterval(polling[invoiceId]); delete polling[invoiceId];
-        alert('Invoice closed: ' + data.status);
+        clearInterval(polling[invoiceId]);
         payModal.classList.remove('show');
+        alert('Tokens issued! Redirecting...');
+        window.location.href = '/Blue-Key-Claim';
+      } else if (['expired', 'failed'].includes(data.status)) {
+        clearInterval(polling[invoiceId]);
+        payModal.classList.remove('show');
+        alert(`Invoice ${data.status}`);
       }
-      // keep polling while pending
     } catch (err) {
-      console.error('poll error', err);
-      // keep trying; don't spam server if error
+      console.error(err);
     }
   }, 6000);
 }
 
-/* Trigger reward API (calls your /reward). Ideally backend auto-runs this when payment verified, but this shows optional flow */
-async function triggerReward(invoiceId, invoiceData) {
-  try {
-    // Option A: backend auto-mints when it detects payment. If so, simply wait for status 'rewarded'.
-    // Option B: frontend triggers reward call (only safe if backend verifies invoice and checks authentication). Here we call a protected endpoint.
-    const resp = await fetch(`${API_BASE}/invoice/${invoiceId}/reward`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})});
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.message || 'Reward failed');
-    // if backend returns success immediately, redirect
-    if (data.success) {
-      // server has already sent reward
-      window.location.href = '/Blue-Key-Claim';
-    }
-  } catch (err) {
-    console.error('reward trigger failed', err);
-    // do nothing; server may auto-issue; front-end will catch 'rewarded' status later
-  }
-}
-
-/* close modal on outside click */
+/* Close modal on outside click */
 window.addEventListener('click', (e) => {
-  if (payModal.classList.contains('show') && !payModal.contains(e.target) && !e.target.closest('#buyBtn')) {
+  if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) {
     payModal.classList.remove('show');
   }
 });
