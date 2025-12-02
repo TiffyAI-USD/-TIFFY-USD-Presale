@@ -4,10 +4,9 @@
   <meta charset="utf-8" />
   <title>TiffyAI Presale — Checkout</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <!-- Web3 + Web3Modal + WalletConnect v1 -->
-  <script src="https://unpkg.com/web3@1.10.0/dist/web3.min.js"></script>
-  <script src="https://unpkg.com/web3modal@1.9.14/dist/index.js"></script>
-  <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+  <!-- Web3 + WalletConnect v1 -->
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
   <style>
     :root {
       --accent1: #00f0ff;
@@ -192,7 +191,6 @@ const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
 // === STATE ===
 let web3 = null;
 let userAddress = null;
-let web3Modal = null;
 let provider = null;
 
 // === DOM ELEMENTS ===
@@ -269,48 +267,52 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === WEB3MODAL + WALLET CONNECT ===
-function initWeb3Modal() {
-  if (web3Modal) return;
+// === CONNECT WALLET ===
+connectBtn.addEventListener('click', async () => {
+  // Try MetaMask / Trust Wallet / OKX (injected)
+  if (window.ethereum) {
+    try {
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      provider = window.ethereum;
+      web3 = new Web3(provider);
+      const accounts = await web3.eth.getAccounts();
+      userAddress = accounts[0];
+      updateWalletUI();
+      await ensureChain();
+      return;
+    } catch (e) {
+      alert('Wallet connection failed: ' + e.message);
+    }
+  }
 
-  const providerOptions = {
-    walletconnect: {
-      package: WalletConnectProvider,
-      options: {
+  // Fallback: WalletConnect
+  if (typeof WalletConnectProvider !== 'undefined') {
+    try {
+      const wc = new WalletConnectProvider({
         rpc: { 56: 'https://bsc-dataseed.binance.org/' },
         chainId: 56,
         qrcode: true
-      }
+      });
+      await wc.enable();
+      provider = wc;
+      web3 = new Web3(wc);
+      const accounts = await web3.eth.getAccounts();
+      userAddress = accounts[0];
+      updateWalletUI();
+      await ensureChain();
+    } catch (e) {
+      alert('WalletConnect failed: ' + e.message);
     }
-  };
-
-  web3Modal = new Web3Modal({
-    cacheProvider: false,
-    providerOptions,
-    disableInjectedProvider: false
-  });
-}
-
-connectBtn.addEventListener('click', async () => {
-  initWeb3Modal();
-
-  try {
-    provider = await web3Modal.connect();
-    web3 = new Web3(provider);
-
-    const accounts = await web3.eth.getAccounts();
-    userAddress = accounts[0];
-
-    addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
-    statusSmall.textContent = 'BNB Chain';
-    connectBtn.textContent = 'BNB Chain';
-
-    ensureChain();
-  } catch (e) {
-    console.error('Connection failed:', e);
-    alert('Wallet connection failed. Try again.');
+  } else {
+    alert('No wallet detected. Install Trust Wallet or MetaMask.');
   }
 });
+
+function updateWalletUI() {
+  addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
+  statusSmall.textContent = 'BNB Chain';
+  connectBtn.textContent = 'BNB Chain';
+}
 
 async function ensureChain() {
   if (!web3 || !provider) return;
@@ -322,22 +324,18 @@ async function ensureChain() {
         params: [{ chainId: '0x38' }]
       });
     }
-  } catch (switchError) {
-    if (switchError.code === 4902) {
-      try {
-        await provider.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: '0x38',
-            chainName: 'BNB Smart Chain',
-            nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-            rpcUrls: ['https://bsc-dataseed.binance.org/'],
-            blockExplorerUrls: ['https://bscscan.com']
-          }]
-        });
-      } catch (addError) {
-        console.error(addError);
-      }
+  } catch (e) {
+    if (e.code === 4902) {
+      await provider.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0x38',
+          chainName: 'BNB Smart Chain',
+          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+          rpcUrls: ['https://bsc-dataseed.binance.org/'],
+          blockExplorerUrls: ['https://bscscan.com']
+        }]
+      });
     }
   }
 }
@@ -476,9 +474,6 @@ currencyEl.addEventListener('change', updateAmount);
 qtyEl.addEventListener('input', updateAmount);
 fetchPrices();
 setInterval(fetchPrices, 30000);
-
-// Initialize Web3Modal only when needed
-initWeb3Modal();
 </script>
 </body>
 </html>
