@@ -1,381 +1,249 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>TiffyAI Presale — Checkout</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TiffyAI Presale — $1 = 1,000,000 TIFFY</title>
   <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
   <style>
     :root {
-      --accent1: #00f0ff;
-      --accent2: #ff00d4;
-      --glass: rgba(255,255,255,0.06);
-      --glass-border: rgba(255,255,255,0.12);
-      --muted: rgba(255,255,255,0.85);
+      --neon: #00f0ff;
+      --pink: #ff00d4;
+      --dark: #0a0a0a;
+      --glass: rgba(10,10,10,0.7);
+      --border: rgba(0,240,255,0.3);
     }
+    * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      margin: 0;
-      font-family: Inter, Poppins, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
-      background: url('Presale1.jpg') center/cover fixed no-repeat;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      background: #000 url('Presale1.jpg') center/cover fixed;
+      color: var(--neon);
+      font-family: 'Segoe UI', sans-serif;
       min-height: 100vh;
-      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      overflow-x: hidden;
     }
-    .wrap {
+    .container {
+      max-width: 800px;
       width: 100%;
-      max-width: 820px;
-      border-radius: 16px;
-      padding: 22px;
-      background: linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.18));
-      border: 1px solid rgba(255,255,255,0.04);
-      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-      backdrop-filter: blur(4px);
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 16completedpx;
+      padding: 24px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      margin-top: 40px;
     }
-    .header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .logo { width: 64px; height: 64px; border-radius: 12px; background: linear-gradient(135deg, var(--accent1), var(--accent2)); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; color: #001; }
-    h1 { margin: 0; font-size: 20px; }
-    p.lead { margin: 4px 0 0 0; opacity: 0.95; font-size: 13px; }
-    .controls { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; align-items: center; justify-content: center; }
-    select, input[type="number"] {
-      padding: 12px; border-radius: 10px; border: none; background: rgba(255,255,255,0.04); color: var(--muted); font-size: 16px; min-width: 170px;
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
     }
-    .btn {
-      padding: 12px 18px; border-radius: 12px; border: none; cursor: pointer; font-weight: 700; font-size: 16px;
+    .header h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(135deg, var(--neon), var(--pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
-    .connect { background: rgba(255,255,255,0.06); color: #fff; }
-    .buy { background: linear-gradient(135deg, var(--accent1), var(--accent2)); color: #062; }
-    #amountDisplay { margin-top: 14px; text-align: center; font-weight: 800; color: var(--accent1); font-size: 18px; }
-    .modal {
-      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-      width: 96%; max-width: 520px; border-radius: 14px; padding: 18px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-      border: 1px solid var(--glass-border); backdrop-filter: blur(10px); box-shadow: 0 30px 80px rgba(0,0,0,0.7);
-      z-index: 1000; display: none;
+    .wallet-btn {
+      background: linear-gradient(135deg, var(--neon), var(--pink));
+      color: #000;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      cursor: pointer;
+      margin: 10px;
+      box-shadow: 0 4px 15px rgba(0,240,255,0.3);
     }
-    .modal.show { display: block; }
-    .addr { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; font-size: 18px; padding: 14px; background: rgba(0,0,0,0.3); border-radius: 12px; word-break: break-all; color: #e8fbff; }
-    .row { display: flex; justify-content: space-between; margin: 8px 0; }
-    .actions { display: flex; gap: 10px; margin-top: 12px; justify-content: space-between; }
-    .copy, .cancel, .proceed { padding: 10px 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; }
-    .copy { background: rgba(255,255,255,0.04); }
-    .cancel { background: #222; color: #fff; border: 1px solid #444; }
-    .proceed { background: linear-gradient(90deg, #00ffcc, #00aaff); color: #000; }
-    .qr { width: 120px; height: 120px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); font-size: 12px; color: rgba(255,255,255,0.6); }
-    .muted { color: rgba(255,255,255,0.75); font-size: 13px; margin-top: 8px; text-align: center; }
-    @media (max-width: 520px) {
-      .logo { width: 56px; height: 56px; }
-      .addr { font-size: 20px; padding: 18px; }
-      .qr { width: 136px; height: 136px; }
-      .modal { padding: 16px; border-radius: 12px; }
-      .btn { font-size: 16px; padding: 12px 14px; }
+    .wallet-btn:hover { transform: scale(1.05); }
+    .amount-input {
+      width: 100%;
+      padding: 16px;
+      margin: 16px 0;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.05);
+      color: white;
+      font-size: 1.2rem;
+      text-align: center;
+    }
+    .total {
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 16px 0;
+      color: var(--neon);
+    }
+    .invoice {
+      background: rgba(0,0,0,0.4);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 20px;
+      text-align: center;
+      display: none;
+    }
+    .addr {
+      font-family: monospace;
+      font-size: 1.1rem;
+      word-break: break-all;
+      background: rgba(0,0,0,0.3);
+      padding: 12px;
+      border-radius: 8px;
+      margin: 10px 0;
+    }
+    .copy-btn {
+      background: rgba(255,255,255,0.1);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 0.9rem;
+      opacity: 0.8;
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="header">
-      <div class="brand">
-        <div class="logo">TI</div>
-        <div>
-          <h1>TiffyAI — Presale Checkout</h1>
-          <p class="lead">Buy TIFFY tokens — $1 presale (0.001 BNB per token)</p>
-        </div>
-      </div>
-      <div id="userMeta" style="text-align: right;">
-        <div id="addrDisplay">Not connected</div>
-        <div id="statusSmall" style="font-size: 12px; opacity: 0.85;">Ready</div>
-      </div>
-    </div>
-    <div class="controls">
-      <select id="currency">
-        <option value="BNB">BNB (native)</option>
-        <option value="USDT">USDT (BEP-20)</option>
-        <option value="BTCB">BTCB (BEP-20)</option>
-      </select>
-      <input id="qty" type="number" min="1" value="1" />
-      <button id="connectBtn" class="btn connect">Connect Wallet</button>
-      <button id="buyBtn" class="btn buy">Create Invoice</button>
-    </div>
-    <div id="amountDisplay">Total: 0.001 BNB</div>
-    <div class="muted">Select amount and currency, then create an invoice to pay.</div>
-  </div>
 
-  <div id="payModal" class="modal" role="dialog" aria-hidden="true">
-    <h3>Confirm Payment</h3>
-    <div class="row"><div>Tokens</div><div id="modalQty">-</div></div>
-    <div class="row"><div>Currency</div><div id="modalCurrency">-</div></div>
-    <div class="row"><div>Amount</div><div id="modalAmount">-</div></div>
-    <div class="row"><div>USD Value</div><div id="modalUSD">-</div></div>
-    <div class="row"><div>Pay to Address</div><div id="modalAddress" class="addr">-</div></div>
-    <div class="row"><div>QR Code</div><div class="qr" id="qrPlaceholder">QR</div></div>
-    <div class="muted" id="modalExpires">Invoice expires in: -</div>
-    <div class="actions">
-      <button class="copy" id="copyAddr">Copy Address</button>
-      <button class="copy" id="copyAmount">Copy Amount</button>
-      <button class="cancel" id="cancelBtn">Cancel</button>
-      <button class="proceed" id="proceedBtn">Proceed with Payment</button>
+  <div class="container">
+    <div class="header">
+      <h1>TiffyAI Presale</h1>
+      <p>$1 = 1,000,000 TIFFY • Limited Time</p>
+    </div>
+
+    <div style="text-align:center;">
+      <button class="wallet-btn" onclick="connect('metamask')">MetaMask</button>
+      <button class="wallet-btn" onclick="connect('okx')">OKX Wallet</button>
+      <button class="wallet-btn" onclick="connect('trust')">Trust Wallet</button>
+    </div>
+
+    <input type="number" id="usdAmount" class="amount-input" placeholder="Enter USD amount (min $1)" min="1" value="1" />
+
+    <div class="total" id="totalDisplay">Total: 0.001 BNB</div>
+
+    <div id="walletStatus" class="status">Not connected</div>
+
+    <div id="invoice" class="invoice">
+      <h3>Send BNB to:</h3>
+      <div class="addr" id="payAddress">—</div>
+      <button class="copy-btn" onclick="copy('payAddress')">Copy Address</button>
+      <button class="copy-btn" onclick="copyAmount()">Copy Amount</button>
+      <div class="status" id="invoiceStatus">Waiting for payment...</div>
     </div>
   </div>
 
   <script>
-    const API_BASE = 'https://tiffyai-wh-wa.onrender.com'; // YOUR BACKEND
-    let web3, account;
+    const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
+    let walletAddress = null;
+    let invoiceId = null;
 
-    // DOM Elements
-    const currencyEl = document.getElementById('currency');
-    const qtyEl = document.getElementById('qty');
-    const connectBtn = document.getElementById('connectBtn');
-    const buyBtn = document.getElementById('buyBtn');
-    const amountDisplay = document.getElementById('amountDisplay');
-    const addrDisplay = document.getElementById('addrDisplay');
-    const statusSmall = document.getElementById('statusSmall');
-    const payModal = document.getElementById('payModal');
-    const modalQty = document.getElementById('modalQty');
-    const modalCurrency = document.getElementById('modalCurrency');
-    const modalAmount = document.getElementById('modalAmount');
-    const modalUSD = document.getElementById('modalUSD');
-    const modalAddress = document.getElementById('modalAddress');
-    const modalExpires = document.getElementById('modalExpires');
-    const qrPlaceholder = document.getElementById('qrPlaceholder');
-    const copyAddr = document.getElementById('copyAddr');
-    const copyAmount = document.getElementById('copyAmount');
-    const cancelBtn = document.getElementById('cancelBtn');
-    const proceedBtn = document.getElementById('proceedBtn');
-
-    // Fetch BNB Price
-    async function fetchBNBPriceUSD() {
-      try {
-        const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd');
-        const data = await resp.json();
-        return parseFloat(data.binancecoin.usd);
-      } catch (e) {
-        console.error("BNB price fetch failed", e);
-        return null;
-      }
+    function updateTotal() {
+      const usd = parseFloat(document.getElementById('usdAmount').value) || 1;
+      const bnb = (usd / 1000).toFixed(6); // $1 = 0.001 BNB
+      document.getElementById('totalDisplay').innerText = `Total: ${bnb} BNB`;
     }
+    document.getElementById('usdAmount').addEventListener('input', updateTotal);
+    updateTotal();
 
-    // Update Total Amount
-    function updateAmount() {
-      const qty = Math.max(1, parseInt(qtyEl.value) || 1);
-      const cur = currencyEl.value;
-      const prices = { BNB: 0.001, USDT: 1.0, BTCB: 0.000014 };
-      const total = qty * prices[cur];
-      const fmt = cur === 'USDT' ? total.toFixed(2) : total.toFixed(6);
-      amountDisplay.innerText = `Total: \( {fmt} \){cur}`;
-    }
-    currencyEl.addEventListener('change', updateAmount);
-    qtyEl.addEventListener('input', updateAmount);
-    updateAmount();
-
-    // Wallet Connect
-    connectBtn.addEventListener('click', async () => {
-      if (!window.ethereum) {
-        alert('Please install MetaMask or a Web3 wallet.');
+    async function connect(type) {
+      let provider;
+      if (type === 'metamask' && window.ethereum?.isMetaMask) provider = window.ethereum;
+      else if (type === 'okx' && window.okxwallet) provider = window.okxwallet;
+      else if (type === 'trust' && window.trustwallet) provider = window.trustwallet;
+      else {
+        alert('Wallet not detected');
         return;
       }
+
       try {
-        web3 = new Web3(window.ethereum);
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        account = accounts[0];
-        const chainId = await web3.eth.getChainId();
-        if (chainId !== 56) {
-          try {
-            await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
-          } catch (e) {
-            alert('Please switch to BNB Smart Chain.');
-            return;
-          }
-        }
-        addrDisplay.innerText = `Connected: \( {account.slice(0, 6)}... \){account.slice(-4)}`;
-        statusSmall.innerText = 'Wallet connected';
-        connectBtn.innerText = 'Connected';
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        walletAddress = accounts[0];
+
+        // Switch to BSC
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x38' }]
+        });
+
+        document.getElementById('walletStatus').innerText = 
+          `Connected: \( {walletAddress.slice(0,6)}... \){walletAddress.slice(-4)}`;
+
+        createInvoice();
       } catch (e) {
-        alert('Wallet connect failed: ' + (e.message || e));
+        alert('Connection failed: ' + e.message);
       }
-    });
+    }
 
-    // Create Invoice
-    buyBtn.addEventListener('click', async () => {
-      if (!account) {
-        const ok = confirm('Connect wallet to continue?');
-        if (!ok) return;
-        await connectBtn.click();
-        if (!account) return;
-      }
-
-      const currency = currencyEl.value;
-      const qty = Math.max(1, parseInt(qtyEl.value) || 1);
+    async function createInvoice() {
+      const usd = parseFloat(document.getElementById('usdAmount').value) || 1;
+      const bnb = (usd / 1000).toFixed(6);
 
       try {
-        buyBtn.disabled = true;
-        statusSmall.innerText = 'Creating invoice...';
-
         const resp = await fetch(`${API_BASE}/create-invoice`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wallet: account, currency, qty })
+          body: JSON.stringify({
+            wallet: walletAddress,
+            currency: 'BNB',
+            qty: usd * 1000000, // 1M TIFFY per $
+            amount: bnb
+          })
         });
-
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err.message || `HTTP ${resp.status}`);
-        }
 
         const data = await resp.json();
+        if (!resp.ok) throw new Error(data.message || 'Failed');
 
-        // Validate response
-        if (!data.invoiceId || !data.payToAddress || !data.amount || !data.expiresAt) {
-          throw new Error('Invalid invoice data');
-        }
+        invoiceId = data.invoiceId;
+        document.getElementById('payAddress').innerText = data.payToAddress;
+        document.getElementById('invoice').style.display = 'block';
+        document.getElementById('invoiceStatus').innerText = 'Send exactly ' + bnb + ' BNB';
 
-        // Fetch BNB price for USD
-        const bnbUSD = await fetchBNBPriceUSD();
-        const usdValue = currency === 'BNB' && bnbUSD ? (data.amount * bnbUSD).toFixed(2) :
-                        currency === 'USDT' ? data.amount.toFixed(2) : '-';
-
-        // Populate Modal
-        modalQty.innerText = `${qty} TIFFY`;
-        modalCurrency.innerText = currency;
-        modalAmount.innerText = `\( {data.amount} \){currency}`;
-        modalUSD.innerText = `$${usdValue}`;
-        modalAddress.innerText = data.payToAddress;
-        modalExpires.innerText = `Expires: ${new Date(data.expiresAt).toLocaleString()}`;
-        qrPlaceholder.innerHTML = data.qr ? `<img src="${data.qr}" style="width:100%;height:100%;border-radius:8px;">` : 'QR';
-
-        payModal.classList.add('show');
-        payModal.dataset.invoiceId = data.invoiceId;
-        statusSmall.innerText = 'Invoice ready';
-
-      } catch (err) {
-        console.error('Invoice error:', err);
-        statusSmall.innerText = 'Invoice failed';
-        alert(`Failed: ${err.message}`);
-      } finally {
-        buyBtn.disabled = false;
+        pollStatus();
+      } catch (e) {
+        alert('Invoice failed: ' + e.message);
       }
-    });
-
-    // Copy Buttons
-    copyAddr.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(modalAddress.innerText);
-      copyAddr.innerText = 'Copied!';
-      setTimeout(() => copyAddr.innerText = 'Copy Address', 1500);
-    });
-
-    copyAmount.addEventListener('click', async () => {
-      const amount = modalAmount.innerText.split(' ')[0];
-      await navigator.clipboard.writeText(amount);
-      copyAmount.innerText = 'Copied!';
-      setTimeout(() => copyAmount.innerText = 'Copy Amount', 1500);
-    });
-
-    cancelBtn.addEventListener('click', () => {
-      payModal.classList.remove('show');
-    });
-
-    // Proceed with Payment
-    proceedBtn.addEventListener('click', async () => {
-      const invoiceId = payModal.dataset.invoiceId;
-      const currency = modalCurrency.innerText;
-
-      if (currency === 'BNB') {
-        try {
-          proceedBtn.disabled = true;
-          statusSmall.innerText = 'Sending BNB...';
-          const amount = modalAmount.innerText.split(' ')[0];
-          const tx = await web3.eth.sendTransaction({
-            from: account,
-            to: modalAddress.innerText,
-            value: web3.utils.toWei(amount, 'ether')
-          });
-          statusSmall.innerText = 'Verifying...';
-          await submitTx(invoiceId, tx.transactionHash);
-        } catch (err) {
-          statusSmall.innerText = 'Payment failed';
-          alert(`Payment failed: ${err.message}`);
-          proceedBtn.disabled = false;
-        }
-      } else {
-        statusSmall.innerText = 'Send manually & wait...';
-        pollInvoiceStatus(invoiceId);
-      }
-    });
-
-    // Submit TX Hash
-    async function submitTx(invoiceId, txHash) {
-      const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}/submit-tx`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txHash })
-      });
-      if (!resp.ok) throw new Error('Submit failed');
-      pollInvoiceStatus(invoiceId);
     }
 
-    // Poll Status
-    const polling = {};
-    function pollInvoiceStatus(invoiceId) {
-      if (polling[invoiceId]) return;
-      let errors = 0;
-      polling[invoiceId] = setInterval(async () => {
+    function copy(id) {
+      const text = document.getElementById(id).innerText;
+      navigator.clipboard.writeText(text);
+      alert('Copied!');
+    }
+
+    function copyAmount() {
+      const bnb = (parseFloat(document.getElementById('usdAmount').value) / 1000).toFixed(6);
+      navigator.clipboard.writeText(bnb);
+      alert('Copied: ' + bnb + ' BNB');
+    }
+
+    async function pollStatus() {
+      if (!invoiceId) return;
+      const interval = setInterval(async () => {
         try {
           const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}`);
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const data = await resp.json();
-
-          statusSmall.innerText = `Status: ${data.status}`;
           if (data.status === 'paid') {
-            statusSmall.innerText = 'Rewarding...';
-            await triggerReward(invoiceId);
+            document.getElementById('invoiceStatus').innerText = 'Payment received!';
+            setTimeout(() => {
+              alert('Payment confirmed! Redirecting...');
+              window.location.href = '/Blue-Key-Claim';
+            }, 1000);
+            clearInterval(interval);
           } else if (data.status === 'rewarded') {
-            clearInterval(polling[invoiceId]);
-            payModal.classList.remove('show');
-            alert('Tokens issued! Redirecting...');
             window.location.href = '/Blue-Key-Claim';
-          } else if (['expired', 'failed'].includes(data.status)) {
-            clearInterval(polling[invoiceId]);
-            payModal.classList.remove('show');
-            alert(`Invoice ${data.status}`);
           }
-          errors = 0;
-        } catch (err) {
-          errors++;
-          statusSmall.innerText = `Check failed (${errors}/5)`;
-          if (errors >= 5) {
-            clearInterval(polling[invoiceId]);
-            payModal.classList.remove('show');
-            alert('Stopped polling due to errors.');
-          }
+        } catch (e) {
+          console.log('Polling...');
         }
-      }, 6000);
+      }, 5000);
     }
-
-    // Trigger Reward
-    async function triggerReward(invoiceId) {
-      try {
-        const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}/reward`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        if (!resp.ok) throw new Error('Reward failed');
-        window.location.href = '/Blue-Key-Claim';
-      } catch (err) {
-        console.error(err);
-        statusSmall.innerText = 'Reward pending...';
-      }
-    }
-
-    // Close modal on outside click
-    window.addEventListener('click', (e) => {
-      if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) {
-        payModal.classList.remove('show');
-      }
-    });
   </script>
 </body>
 </html>
