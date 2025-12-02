@@ -9,11 +9,6 @@
   <!-- WalletConnect v2 "ethereum-provider" UMD (works with Trust Wallet + WC v2 wallets) -->
   <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.2/dist/index.umd.min.js"></script>
 
-  <!-- Optional: legacy WalletConnect v1 provider as a final fallback -->
-  <script>
-    // We'll dynamically load v1 provider only if needed later (keeps initial load lighter).
-  </script>
-
   <style>
     :root {
       --accent1: #00f0ff;
@@ -279,15 +274,13 @@ function updateAmount() {
 }
 
 // === WALLET CONNECTION LOGIC ===
-// This replaces the prior connect flow with support for:
-// - window.ethereum (MetaMask / injected)
-// - window.trustwallet (Trust Wallet injected provider if present)
-// - WalletConnect v2 via ethereum-provider (uses your WC_PROJECT_ID)
-// - final fallback to WalletConnect v1 provider if needed (dynamically loaded)
+// This keeps your original style but adds Trust injected detection + WCv2 + WCv1 fallback
 
 async function initWeb3WithProvider(_provider) {
   try {
     provider = _provider;
+    // Some providers expose `provider.provider` (WC v2 wrapper). Normalize:
+    if (provider && provider.provider) provider = provider.provider;
     web3 = new Web3(provider);
     const accounts = await web3.eth.getAccounts();
     userAddress = accounts && accounts[0];
@@ -306,14 +299,17 @@ async function initWeb3WithProvider(_provider) {
   }
 }
 
+function isMobile() {
+  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+}
+
 async function connectWalletHandler() {
-  // Quick guard
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
-  // 1) If injected trustwallet provider exists (Trust Wallet mobile)
+  // 1) Trust Wallet internal browser (best)
   try {
-    if (window.trustwallet && window.trustwallet.request) {
+    if (window.trustwallet && typeof window.trustwallet.request === 'function') {
       try {
         await window.trustwallet.request({ method: 'eth_requestAccounts' });
         await initWeb3WithProvider(window.trustwallet);
@@ -327,9 +323,18 @@ async function connectWalletHandler() {
     console.warn('Trust detection error', e);
   }
 
-  // 2) If injected ethereum (MetaMask, Brave, etc.)
+  // If we are on mobile and trustwallet isn't injected, warn the user to open inside Trust's browser for best results
+  if (isMobile() && /Trust/i.test(navigator.userAgent) === false && !window.trustwallet) {
+    // If the user is on mobile but not inside the Trust Wallet app, we inform them.
+    // We do NOT block — user can continue to use WalletConnect fallback.
+    console.log('Mobile device, but not inside Trust Wallet internal browser.');
+    // (optional) show a small friendly prompt
+    // alert('If you use Trust Wallet, open this page inside the Trust Wallet app browser for the smoothest experience. Otherwise, continue to WalletConnect.');
+  }
+
+  // 2) Injected ethereum (MetaMask, Brave, etc.)
   try {
-    if (window.ethereum && window.ethereum.request) {
+    if (window.ethereum && typeof window.ethereum.request === 'function') {
       try {
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         await initWeb3WithProvider(window.ethereum);
@@ -345,28 +350,30 @@ async function connectWalletHandler() {
 
   // 3) WalletConnect v2 via @walletconnect/ethereum-provider
   try {
-    if (window.WalletConnectProvider) {
-      // WalletConnect v2 ethereum-provider exposes WalletConnectProvider
+    if (window.WalletConnectProvider && typeof window.WalletConnectProvider.init === 'function') {
       const wcProvider = await window.WalletConnectProvider.init({
         projectId: WC_PROJECT_ID,
         chains: [56],
         showQrModal: true,
+        optionalChains: [],
+        rpcMap: { 56: 'https://bsc-dataseed.binance.org/' },
         metadata: {
-          name: "TiffyAI Presale",
-          description: "Connect your wallet to TiffyAI",
-          url: "https://tiffyai.github.io",
-          icons: ["https://tiffyai.github.io/Dream-Menu/TiffyAI-Token.png"]
-        },
-        rpcMap: {
-          56: 'https://bsc-dataseed.binance.org/'
+          name: 'TiffyAI Presale',
+          description: 'Connect your wallet to TiffyAI',
+          url: 'https://tiffyai.github.io',
+          icons: ['https://tiffyai.github.io/Dream-Menu/TiffyAI-Token.png']
         }
       });
 
-      // Enable (this will show QR or deep link on mobile)
-      const wcEnableResult = await wcProvider.enable(); // returns array of accounts
-      await initWeb3WithProvider(wcProvider);
-      connectBtn.disabled = false;
-      return;
+      // enable -> opens QR / deep link
+      try {
+        await wcProvider.enable();
+        await initWeb3WithProvider(wcProvider);
+        connectBtn.disabled = false;
+        return;
+      } catch (e) {
+        console.warn('WCv2 provider enable failed', e);
+      }
     }
   } catch (e) {
     console.warn('WalletConnect v2 connect failed', e);
@@ -376,7 +383,8 @@ async function connectWalletHandler() {
   try {
     if (!window.WalletConnectProvider_v1) {
       await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
-      window.WalletConnectProvider_v1 = window.WalletConnectProvider || window.WalletConnectProvider_default || null;
+      // some UMD builds expose WalletConnectProvider or default
+      window.WalletConnectProvider_v1 = window.WalletConnectProvider || window.WalletConnectProvider_default || window.WalletConnectProvider_v1 || null;
     }
     const WCProviderV1 = window.WalletConnectProvider_v1;
     if (WCProviderV1) {
@@ -394,7 +402,7 @@ async function connectWalletHandler() {
     console.warn('WalletConnect v1 fallback failed', e);
   }
 
-  alert('No wallet could be connected. Ensure you have a mobile wallet (Trust / MetaMask) or desktop extension installed.');
+  alert('No wallet could be connected. Ensure you have a mobile wallet (Trust / MetaMask) or desktop extension installed. For Trust Wallet users, opening this page inside the Trust Wallet app browser is recommended.');
   connectBtn.disabled = false;
   connectBtn.textContent = 'Connect Wallet';
 }
@@ -411,7 +419,6 @@ function loadScript(src) {
   });
 }
 
-// === CONNECT WALLET BUTTON ===
 connectBtn.addEventListener('click', connectWalletHandler);
 
 // === ENSURE CHAIN (keeps your old logic) ===
@@ -421,7 +428,6 @@ async function ensureChain() {
     const chainId = await web3.eth.getChainId();
     if (chainId !== 56) {
       try {
-        // Some providers (WC v2) implement request similarly
         await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
       } catch (e) {
         if (e && e.code === 4902) {
@@ -468,7 +474,6 @@ buyBtn.addEventListener('click', async () => {
   }
 
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  // Keep your original QR data building style (unchanged)
   const qrData = currency === 'BNB'
     ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}`
     : `\( {PRESALE_WALLET}?amount= \){amount}`;
@@ -511,7 +516,6 @@ payWithWallet.onclick = async () => {
   const wei = web3.utils.toWei(amount, 'ether');
 
   try {
-    // Use provider.request to send transaction (this will prompt user)
     const params = [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }];
     const tx = await provider.request({
       method: 'eth_sendTransaction',
