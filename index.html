@@ -216,33 +216,26 @@ const payWithWallet = document.getElementById('payWithWallet');
 const submitTx = document.getElementById('submitTx');
 const txHashInput = document.getElementById('txHashInput');
 
-// === CONNECT WALLET (ON CLICK ONLY) ===
+// === CONNECT WALLET — TRUST WALLET USES window.ethereum ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
   let connected = false;
 
-  // 1. TRUST WALLET (NOW AVAILABLE AFTER CLICK)
-  if (window.trustwallet && typeof window.trustwallet.request === 'function') {
-    try {
-      await window.trustwallet.request({ method: 'eth_requestAccounts' });
-      await initWeb3(window.trustwallet);
-      connected = true;
-    } catch (e) { console.warn('Trust failed', e); }
-  }
-
-  // 2. METAMASK / INJECTED
-  else if (window.ethereum) {
+  // 1. USE window.ethereum — WORKS IN TRUST WALLET DAPP
+  if (window.ethereum) {
     try {
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       await initWeb3(window.ethereum);
       connected = true;
-    } catch (e) { console.warn('Injected failed', e); }
+    } catch (e) {
+      console.warn('ethereum request failed', e);
+    }
   }
 
-  // 3. WALLET CONNECT V1
-  else {
+  // 2. FALLBACK: WalletConnect
+  if (!connected) {
     try {
       await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
       const WC = window.WalletConnectProvider || window.WalletConnectProvider.default;
@@ -252,11 +245,13 @@ async function connectWalletHandler() {
         await initWeb3(wc);
         connected = true;
       }
-    } catch (e) { console.warn('WC failed', e); }
+    } catch (e) {
+      console.warn('WalletConnect failed', e);
+    }
   }
 
   if (!connected) {
-    alert('No wallet found. Open in Trust Wallet DApp or install MetaMask.');
+    alert('No wallet detected. Open in Trust Wallet DApp browser.');
   }
 
   connectBtn.disabled = false;
