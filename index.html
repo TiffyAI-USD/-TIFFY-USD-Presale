@@ -103,11 +103,12 @@
     <div id="amountDisplay">Total: 0.001 BNB</div>
     <div class="muted">Select amount and currency, then create an invoice to pay.</div>
   </div>
+
   <div id="payModal" class="modal" role="dialog" aria-hidden="true">
     <h3>Confirm Payment</h3>
     <div class="row"><div>Tokens</div><div id="modalQty">-</div></div>
     <div class="row"><div>Currency</div><div id="modalCurrency">-</div></div>
-    <div class="row"><div>Amount</div><div idBoebert="modalAmount">-</div></div>
+    <div class="row"><div>Amount</div><div id="modalAmount">-</div></div>
     <div class="row"><div>USD Value</div><div id="modalUSD">-</div></div>
     <div class="row"><div>Pay to Address</div><div id="modalAddress" class="addr">-</div></div>
     <div class="row"><div>QR Code</div><div class="qr" id="qrPlaceholder">QR</div></div>
@@ -119,10 +120,12 @@
       <button class="proceed" id="proceedBtn">Proceed with Payment</button>
     </div>
   </div>
+
   <script>
-    const API_BASE = 'https://tiffyai-wh-wa.onrender.com'; // REPLACE WITH YOUR BACKEND URL
+    const API_BASE = 'https://tiffyai-wh-wa.onrender.com'; // YOUR BACKEND
     let web3, account;
 
+    // DOM Elements
     const currencyEl = document.getElementById('currency');
     const qtyEl = document.getElementById('qty');
     const connectBtn = document.getElementById('connectBtn');
@@ -143,21 +146,24 @@
     const cancelBtn = document.getElementById('cancelBtn');
     const proceedBtn = document.getElementById('proceedBtn');
 
+    // Fetch BNB Price
     async function fetchBNBPriceUSD() {
       try {
         const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd');
         const data = await resp.json();
         return parseFloat(data.binancecoin.usd);
-      } catch {
+      } catch (e) {
+        console.error("BNB price fetch failed", e);
         return null;
       }
     }
 
+    // Update Total Amount
     function updateAmount() {
       const qty = Math.max(1, parseInt(qtyEl.value) || 1);
       const cur = currencyEl.value;
       const prices = { BNB: 0.001, USDT: 1.0, BTCB: 0.000014 };
-      const total = qty * (prices[cur] || 0);
+      const total = qty * prices[cur];
       const fmt = cur === 'USDT' ? total.toFixed(2) : total.toFixed(6);
       amountDisplay.innerText = `Total: \( {fmt} \){cur}`;
     }
@@ -165,8 +171,9 @@
     qtyEl.addEventListener('input', updateAmount);
     updateAmount();
 
+    // Wallet Connect
     connectBtn.addEventListener('click', async () => {
-      if (typeof window.ethereum === 'undefined') {
+      if (!window.ethereum) {
         alert('Please install MetaMask or a Web3 wallet.');
         return;
       }
@@ -178,7 +185,7 @@
         if (chainId !== 56) {
           try {
             await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
-          } catch {
+          } catch (e) {
             alert('Please switch to BNB Smart Chain.');
             return;
           }
@@ -191,6 +198,7 @@
       }
     });
 
+    // Create Invoice
     buyBtn.addEventListener('click', async () => {
       if (!account) {
         const ok = confirm('Connect wallet to continue?');
@@ -201,159 +209,152 @@
 
       const currency = currencyEl.value;
       const qty = Math.max(1, parseInt(qtyEl.value) || 1);
+
       try {
         buyBtn.disabled = true;
         statusSmall.innerText = 'Creating invoice...';
+
         const resp = await fetch(`${API_BASE}/create-invoice`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallet: account, currency, qty })
         });
+
         if (!resp.ok) {
-          const errorData = await resp.json().catch(() => ({}));
-          throw new Error(errorData.message || `HTTP ${resp.status}: Failed to create invoice`);
-        }
-        const data = await resp.json();
-        if (!data.invoiceId || !data.payToAddress || !data.amount || !data.currency || !data.expiresAt) {
-          throw new Error('Invalid invoice response');
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.message || `HTTP ${resp.status}`);
         }
 
+        const data = await resp.json();
+
+        // Validate response
+        if (!data.invoiceId || !data.payToAddress || !data.amount || !data.expiresAt) {
+          throw new Error('Invalid invoice data');
+        }
+
+        // Fetch BNB price for USD
         const bnbUSD = await fetchBNBPriceUSD();
-        const usdValue = currency === 'BNB' && bnbUSD ? (data.amount * bnbUSD).toFixed(2) : currency === 'USDT' ? data.amount.toFixed(2) : '-';
+        const usdValue = currency === 'BNB' && bnbUSD ? (data.amount * bnbUSD).toFixed(2) :
+                        currency === 'USDT' ? data.amount.toFixed(2) : '-';
+
+        // Populate Modal
         modalQty.innerText = `${qty} TIFFY`;
         modalCurrency.innerText = currency;
         modalAmount.innerText = `\( {data.amount} \){currency}`;
         modalUSD.innerText = `$${usdValue}`;
         modalAddress.innerText = data.payToAddress;
-        modalExpires.innerText = `Expires at ${new Date(data.expiresAt).toLocaleString()}`;
-        qrPlaceholder.innerText = data.qr || 'QR';
+        modalExpires.innerText = `Expires: ${new Date(data.expiresAt).toLocaleString()}`;
+        qrPlaceholder.innerHTML = data.qr ? `<img src="${data.qr}" style="width:100%;height:100%;border-radius:8px;">` : 'QR';
+
         payModal.classList.add('show');
         payModal.dataset.invoiceId = data.invoiceId;
-        statusSmall.innerText = 'Invoice created';
+        statusSmall.innerText = 'Invoice ready';
+
       } catch (err) {
         console.error('Invoice error:', err);
-        statusSmall.innerText = 'Error: Unable to create invoice';
-        alert(`Failed to create invoice: ${err.message || 'Unknown error'}`);
+        statusSmall.innerText = 'Invoice failed';
+        alert(`Failed: ${err.message}`);
       } finally {
         buyBtn.disabled = false;
       }
     });
 
+    // Copy Buttons
     copyAddr.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(modalAddress.innerText);
-        copyAddr.innerText = 'Copied';
-        setTimeout(() => copyAddr.innerText = 'Copy Address', 1200);
-      } catch {
-        alert('Copy failed');
-      }
+      await navigator.clipboard.writeText(modalAddress.innerText);
+      copyAddr.innerText = 'Copied!';
+      setTimeout(() => copyAddr.innerText = 'Copy Address', 1500);
     });
 
     copyAmount.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(modalAmount.innerText.split(' ')[0]);
-        copyAmount.innerText = 'Copied';
-        setTimeout(() => copyAmount.innerText = 'Copy Amount', 1200);
-      } catch {
-        alert('Copy failed');
-      }
+      const amount = modalAmount.innerText.split(' ')[0];
+      await navigator.clipboard.writeText(amount);
+      copyAmount.innerText = 'Copied!';
+      setTimeout(() => copyAmount.innerText = 'Copy Amount', 1500);
     });
 
     cancelBtn.addEventListener('click', () => {
       payModal.classList.remove('show');
     });
 
+    // Proceed with Payment
     proceedBtn.addEventListener('click', async () => {
       const invoiceId = payModal.dataset.invoiceId;
       const currency = modalCurrency.innerText;
+
       if (currency === 'BNB') {
         try {
           proceedBtn.disabled = true;
-          statusSmall.innerText = 'Sending payment...';
+          statusSmall.innerText = 'Sending BNB...';
           const amount = modalAmount.innerText.split(' ')[0];
-          const payToAddress = modalAddress.innerText;
           const tx = await web3.eth.sendTransaction({
             from: account,
-            to: payToAddress,
+            to: modalAddress.innerText,
             value: web3.utils.toWei(amount, 'ether')
           });
-          statusSmall.innerText = 'Payment sent, verifying...';
+          statusSmall.innerText = 'Verifying...';
           await submitTx(invoiceId, tx.transactionHash);
         } catch (err) {
-          console.error('Payment error:', err);
           statusSmall.innerText = 'Payment failed';
-          alert(`Payment failed: ${err.message || 'Unknown error'}`);
+          alert(`Payment failed: ${err.message}`);
           proceedBtn.disabled = false;
         }
       } else {
-        statusSmall.innerText = 'Please send payment manually and wait for confirmation.';
+        statusSmall.innerText = 'Send manually & wait...';
         pollInvoiceStatus(invoiceId);
       }
     });
 
+    // Submit TX Hash
     async function submitTx(invoiceId, txHash) {
-      try {
-        const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}/submit-tx`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ txHash })
-        });
-        if (!resp.ok) {
-          const errorData = await resp.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Submit failed');
-        }
-        pollInvoiceStatus(invoiceId);
-      } catch (err) {
-        console.error('Submit error:', err);
-        alert('Submit failed: ' + err.message);
-        statusSmall.innerText = 'Submit failed';
-      }
+      const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}/submit-tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txHash })
+      });
+      if (!resp.ok) throw new Error('Submit failed');
+      pollInvoiceStatus(invoiceId);
     }
 
-    let polling = {};
+    // Poll Status
+    const polling = {};
     function pollInvoiceStatus(invoiceId) {
       if (polling[invoiceId]) return;
-      let errorCount = 0;
-      const maxErrors = 5;
+      let errors = 0;
       polling[invoiceId] = setInterval(async () => {
         try {
           const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}`);
-          if (!resp.ok) {
-            const errorData = await resp.json().catch(() => ({}));
-            throw new Error(errorData.message || `HTTP ${resp.status}: Failed to fetch status`);
-          }
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const data = await resp.json();
-          statusSmall.innerText = `Invoice: ${data.status}`;
+
+          statusSmall.innerText = `Status: ${data.status}`;
           if (data.status === 'paid') {
-            statusSmall.innerText = 'Payment confirmed, rewarding...';
+            statusSmall.innerText = 'Rewarding...';
             await triggerReward(invoiceId);
           } else if (data.status === 'rewarded') {
             clearInterval(polling[invoiceId]);
-            delete polling[invoiceId];
             payModal.classList.remove('show');
             alert('Tokens issued! Redirecting...');
             window.location.href = '/Blue-Key-Claim';
-          } else if (data.status === 'expired' || data.status === 'failed') {
+          } else if (['expired', 'failed'].includes(data.status)) {
             clearInterval(polling[invoiceId]);
-            delete polling[invoiceId];
             payModal.classList.remove('show');
-            alert(`Invoice closed: ${data.status}`);
+            alert(`Invoice ${data.status}`);
           }
-          errorCount = 0;
+          errors = 0;
         } catch (err) {
-          console.error('Poll error:', err);
-          errorCount++;
-          statusSmall.innerText = `Status check failed (\( {errorCount}/ \){maxErrors})`;
-          if (errorCount >= maxErrors) {
+          errors++;
+          statusSmall.innerText = `Check failed (${errors}/5)`;
+          if (errors >= 5) {
             clearInterval(polling[invoiceId]);
-            delete polling[invoiceId];
             payModal.classList.remove('show');
-            alert('Stopped checking invoice due to errors.');
+            alert('Stopped polling due to errors.');
           }
         }
       }, 6000);
     }
 
+    // Trigger Reward
     async function triggerReward(invoiceId) {
       try {
         const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}/reward`, {
@@ -361,22 +362,17 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({})
         });
-        if (!resp.ok) {
-          const errorData = await resp.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Reward failed');
-        }
-        const data = await resp.json();
-        if (data.success) {
-          window.location.href = '/Blue-Key-Claim';
-        }
+        if (!resp.ok) throw new Error('Reward failed');
+        window.location.href = '/Blue-Key-Claim';
       } catch (err) {
-        console.error('Reward error:', err);
-        statusSmall.innerText = 'Reward failed, awaiting server confirmation';
+        console.error(err);
+        statusSmall.innerText = 'Reward pending...';
       }
     }
 
+    // Close modal on outside click
     window.addEventListener('click', (e) => {
-      if (payModal.classList.contains('show') && !payModal.contains(e.target) && !e.target.closest('#buyBtn')) {
+      if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) {
         payModal.classList.remove('show');
       }
     });
