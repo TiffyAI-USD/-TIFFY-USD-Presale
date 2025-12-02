@@ -1,248 +1,126 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>TiffyAI Presale — $1 = 1,000,000 TIFFY</title>
-  <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
+  <meta charset="utf-8"/>
+  <title>TIFFY Presale - $1 = 1 TIFFY</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.7.5/dist/web3.min.js"></script>
   <style>
-    :root {
-      --neon: #00f0ff;
-      --pink: #ff00d4;
-      --dark: #0a0a0a;
-      --glass: rgba(10,10,10,0.7);
-      --border: rgba(0,240,255,0.3);
-    }
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body {
-      background: #000 url('Presale1.jpg') center/cover fixed;
-      color: var(--neon);
-      font-family: 'Segoe UI', sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-      overflow-x: hidden;
-    }
-    .container {
-      max-width: 800px;
-      width: 100%;
-      background: var(--glass);
-      border: 1px solid var(--border);
-      border-radius: 16completedpx;
-      padding: 24px;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      margin-top: 40px;
-    }
-    .header {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-    .header h1 {
-      font-size: 2.5rem;
-      background: linear-gradient(135deg, var(--neon), var(--pink));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .wallet-btn {
-      background: linear-gradient(135deg, var(--neon), var(--pink));
-      color: #000;
-      border: none;
-      padding: 14px 28px;
-      border-radius: 12px;
-      font-weight: 700;
-      font-size: 1.1rem;
-      cursor: pointer;
-      margin: 10px;
-      box-shadow: 0 4px 15px rgba(0,240,255,0.3);
-    }
-    .wallet-btn:hover { transform: scale(1.05); }
-    .amount-input {
-      width: 100%;
-      padding: 16px;
-      margin: 16px 0;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.05);
-      color: white;
-      font-size: 1.2rem;
-      text-align: center;
-    }
-    .total {
-      text-align: center;
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin: 16px 0;
-      color: var(--neon);
-    }
-    .invoice {
-      background: rgba(0,0,0,0.4);
-      border-radius: 12px;
-      padding: 16px;
-      margin-top: 20px;
-      text-align: center;
-      display: none;
-    }
-    .addr {
-      font-family: monospace;
-      font-size: 1.1rem;
-      word-break: break-all;
-      background: rgba(0,0,0,0.3);
-      padding: 12px;
-      border-radius: 8px;
-      margin: 10px 0;
-    }
-    .copy-btn {
-      background: rgba(255,255,255,0.1);
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin: 5px;
-    }
-    .status {
-      margin-top: 10px;
-      font-size: 0.9rem;
-      opacity: 0.8;
-    }
+    :root{--a1:#00f0ff;--a2:#ff00d4;--g:rgba(255,255,255,.05);--gb:rgba(255,255,255,.15);}
+    body{background:#000 url(Presale1.jpg) center/cover fixed;color:#fff;font-family:system-ui,Helvetica,Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;margin:0}
+    .box{width:100%;max-width:500px;background:linear-gradient(180deg,rgba(0,0,0,.3),rgba(0,0,0,.2));border:1px solid var(--gb);border-radius:16px;padding:30px;backdrop-filter:blur(8px);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+    .logo{width:72px;height:72px;background:linear-gradient(135deg,var(--a1),var(--a2));border-radius:14px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;color:#001}
+    h1{margin:0 0 10px;font-size:24px;text-align:center}
+    p{font-size:14px;opacity:.9;margin:8px 0 20px;text-align:center}
+    .input{width:100%;padding:14px;margin:10px 0;border:none;border-radius:10px;background:var(--g);color:#fff;font-size:16px;text-align:center}
+    .btn{width:100%;padding:16px;margin:8px 0;border:none;border-radius:12px;background:linear-gradient(135deg,var(--a1),var(--a2));color:#000;font-weight:700;cursor:pointer;transition:.3s}
+    .btn:hover{background:linear-gradient(135deg,#00b8cc,#cc00aa)}
+    .status{margin:15px 0 0;text-align:center;font-size:14px;opacity:.8}
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:100;display:none}
+    .m{width:96%;max-width:400px;border-radius:14px;padding:20px;background:linear-gradient(180deg,rgba(0,0,0,.5),rgba(0,0,0,.3));border:1px solid var(--gb);backdrop-filter:blur(10px);text-align:center}
+    .m h3{margin:0 0 15px;font-size:18px}
+    .addr{font-family:monospace;font-size:16px;word-break:break-all;background:rgba(0,0,0,.4);padding:12px;border-radius:8px;margin:10px 0}
+    .copy{background:#333;color:#fff;padding:8px 12px;border:none;border-radius:6px;cursor:pointer;margin:5px}
+    .close{margin-top:10px;background:#444;color:#fff;padding:8px;border:none;border-radius:6px;cursor:pointer}
+    @media(max-width:500px){.box{padding:20px}}
   </style>
 </head>
 <body>
+  <div class="box">
+    <div class="logo">TI</div>
+    <h1>TIFFY Presale</h1>
+    <p>1 TIFFY = $1</p>
+    <input id="qty" class="input" type="number" min="1" value="1" placeholder="How many TIFFY?"/>
+    <button id="connect" class="btn">Connect Wallet</button>
+    <button id="pay" class="btn" style="display:none">Pay Now</button>
+    <div id="wallet" class="status"></div>
+  </div>
 
-  <div class="container">
-    <div class="header">
-      <h1>TiffyAI Presale</h1>
-      <p>$1 = 1,000,000 TIFFY • Limited Time</p>
-    </div>
-
-    <div style="text-align:center;">
-      <button class="wallet-btn" onclick="connect('metamask')">MetaMask</button>
-      <button class="wallet-btn" onclick="connect('okx')">OKX Wallet</button>
-      <button class="wallet-btn" onclick="connect('trust')">Trust Wallet</button>
-    </div>
-
-    <input type="number" id="usdAmount" class="amount-input" placeholder="Enter USD amount (min $1)" min="1" value="1" />
-
-    <div class="total" id="totalDisplay">Total: 0.001 BNB</div>
-
-    <div id="walletStatus" class="status">Not connected</div>
-
-    <div id="invoice" class="invoice">
-      <h3>Send BNB to:</h3>
-      <div class="addr" id="payAddress">—</div>
-      <button class="copy-btn" onclick="copy('payAddress')">Copy Address</button>
-      <button class="copy-btn" onclick="copyAmount()">Copy Amount</button>
-      <div class="status" id="invoiceStatus">Waiting for payment...</div>
+  <div id="modal" class="modal">
+    <div class="m">
+      <h3>Send to</h3>
+      <div class="addr" id="addr">-</div>
+      <button class="copy" onclick="copyAddr()">Copy Address</button>
+      <button class="copy" onclick="copyAmt()">Copy Amount</button>
+      <div class="status" id="status">Waiting...</div>
+      <button class="close" onclick="closeModal()">Close</button>
     </div>
   </div>
 
   <script>
-    const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
-    let walletAddress = null;
-    let invoiceId = null;
+    const API = 'https://tiffyai-wh-wa.onrender.com';
+    let w3, addr, inv;
 
-    function updateTotal() {
-      const usd = parseFloat(document.getElementById('usdAmount').value) || 1;
-      const bnb = (usd / 1000).toFixed(6); // $1 = 0.001 BNB
-      document.getElementById('totalDisplay').innerText = `Total: ${bnb} BNB`;
-    }
-    document.getElementById('usdAmount').addEventListener('input', updateTotal);
-    updateTotal();
+    document.getElementById('connect').onclick = async()=>{
+      if(!window.ethereum){alert('MetaMask?');return}
+      try{
+        await window.ethereum.request({method:'eth_requestAccounts'});
+        w3 = new Web3(window.ethereum);
+        addr = (await w3.eth.getAccounts())[0];
 
-    async function connect(type) {
-      let provider;
-      if (type === 'metamask' && window.ethereum?.isMetaMask) provider = window.ethereum;
-      else if (type === 'okx' && window.okxwallet) provider = window.okxwallet;
-      else if (type === 'trust' && window.trustwallet) provider = window.trustwallet;
-      else {
-        alert('Wallet not detected');
-        return;
-      }
-
-      try {
-        const accounts = await provider.request({ method: 'eth_requestAccounts' });
-        walletAddress = accounts[0];
-
-        // Switch to BSC
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x38' }]
-        });
-
-        document.getElementById('walletStatus').innerText = 
-          `Connected: \( {walletAddress.slice(0,6)}... \){walletAddress.slice(-4)}`;
-
-        createInvoice();
-      } catch (e) {
-        alert('Connection failed: ' + e.message);
-      }
-    }
-
-    async function createInvoice() {
-      const usd = parseFloat(document.getElementById('usdAmount').value) || 1;
-      const bnb = (usd / 1000).toFixed(6);
-
-      try {
-        const resp = await fetch(`${API_BASE}/create-invoice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            wallet: walletAddress,
-            currency: 'BNB',
-            qty: usd * 1000000, // 1M TIFFY per $
-            amount: bnb
-          })
-        });
-
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.message || 'Failed');
-
-        invoiceId = data.invoiceId;
-        document.getElementById('payAddress').innerText = data.payToAddress;
-        document.getElementById('invoice').style.display = 'block';
-        document.getElementById('invoiceStatus').innerText = 'Send exactly ' + bnb + ' BNB';
-
-        pollStatus();
-      } catch (e) {
-        alert('Invoice failed: ' + e.message);
-      }
-    }
-
-    function copy(id) {
-      const text = document.getElementById(id).innerText;
-      navigator.clipboard.writeText(text);
-      alert('Copied!');
-    }
-
-    function copyAmount() {
-      const bnb = (parseFloat(document.getElementById('usdAmount').value) / 1000).toFixed(6);
-      navigator.clipboard.writeText(bnb);
-      alert('Copied: ' + bnb + ' BNB');
-    }
-
-    async function pollStatus() {
-      if (!invoiceId) return;
-      const interval = setInterval(async () => {
-        try {
-          const resp = await fetch(`\( {API_BASE}/invoice/ \){invoiceId}`);
-          const data = await resp.json();
-          if (data.status === 'paid') {
-            document.getElementById('invoiceStatus').innerText = 'Payment received!';
-            setTimeout(() => {
-              alert('Payment confirmed! Redirecting...');
-              window.location.href = '/Blue-Key-Claim';
-            }, 1000);
-            clearInterval(interval);
-          } else if (data.status === 'rewarded') {
-            window.location.href = '/Blue-Key-Claim';
-          }
-        } catch (e) {
-          console.log('Polling...');
+        // BSC switch with fallback
+        try{
+          await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x38'}]});
+        }catch(e){
+          if(e.code===4902){
+            await window.ethereum.request({method:'wallet_addEthereumChain',params:[{
+              chainId:'0x38',
+              chainName:'BNB Smart Chain',
+              nativeCurrency:{name:'BNB',symbol:'BNB',decimals:18},
+              rpcUrls:['https://bsc-dataseed.binance.org/'],
+              blockExplorerUrls:['https://bscscan.com']
+            }]});
+          }else throw e;
         }
-      }, 5000);
+
+        document.getElementById('wallet').textContent = `Wallet: \( {addr.slice(0,6)}... \){addr.slice(-4)}`;
+        document.getElementById('connect').style.display = 'none';
+        document.getElementById('pay').style.display = 'block';
+      }catch(e){alert('Connect failed: '+e.message)}
+    };
+
+    document.getElementById('pay').onclick = async()=>{
+      const qty = parseInt(document.getElementById('qty').value);
+      if(!qty || qty<1){alert('Enter amount');return}
+      const amt = (qty * 0.000015).toFixed(18); // ~$1 = 0.000015 BNB at $66k BNB
+
+      try{
+        document.getElementById('status').textContent = 'Creating invoice...';
+        const r = await fetch(`${API}/create-invoice`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({wallet:addr,currency:'BNB',qty,amount:amt})
+        });
+        const d = await r.json();
+        if(!r.ok) throw new Error(d.message || 'Failed');
+
+        inv = d.invoiceId;
+        document.getElementById('addr').textContent = d.payToAddress;
+        document.getElementById('status').textContent = `Send ${amt} BNB`;
+        document.getElementById('modal').style.display = 'flex';
+        poll(d.invoiceId);
+      }catch(e){alert('Invoice failed: '+e.message)}
+    };
+
+    function copyAddr(){navigator.clipboard.writeText(document.getElementById('addr').textContent);alert('Copied!')}
+    function copyAmt(){navigator.clipboard.writeText((parseInt(document.getElementById('qty').value)*0.000015).toFixed(18));alert('Copied!')}
+    function closeModal(){document.getElementById('modal').style.display='none'}
+
+    function poll(id){
+      const i = setInterval(async()=>{
+        try{
+          const r = await fetch(`\( {API}/invoice/ \){id}`);
+          const d = await r.json();
+          if(d.status==='paid'){
+            document.getElementById('status').textContent='Paid! Rewarding...';
+            clearInterval(i);
+            setTimeout(()=>{window.location='/Blue-Key-Claim'},1500);
+          }else if(d.status==='rewarded'){
+            clearInterval(i);
+            window.location='/Blue-Key-Claim';
+          }
+        }catch(e){}
+      },5000);
     }
   </script>
 </body>
