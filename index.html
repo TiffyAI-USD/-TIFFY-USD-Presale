@@ -5,10 +5,6 @@
   <title>TiffyAI Presale — Checkout</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
-
-  <!-- WalletConnect v2 "ethereum-provider" UMD (works with Trust Wallet + WC v2 wallets) -->
-  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.2/dist/index.umd.min.js"></script>
-
   <style>
     :root {
       --accent1: #00f0ff;
@@ -77,7 +73,7 @@
     .invoice-line {
       display: flex; justify-content: space-between; padding: 8px 0; font-size: 15px; border-bottom: 1px dashed rgba(255,255,255,0.15);
     }
-    .invoice-line:last-child { border-bottom: none; font-weight: 700; color: var(--accent1); }
+    .invoice-line:last-child { border-bottom: none; font-weight: 700; color:var(--accent1); }
 
     .addr {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
@@ -190,9 +186,6 @@
 const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA';
 const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
 
-// WalletConnect v2 project id (your Reown ID)
-const WC_PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576';
-
 // === STATE ===
 let userAddress = null;
 let provider = null;
@@ -223,7 +216,7 @@ const payWithWallet = document.getElementById('payWithWallet');
 const submitTx = document.getElementById('submitTx');
 const txHashInput = document.getElementById('txHashInput');
 
-// === FETCH LIVE PRICES ===
+// === PRICES ===
 async function fetchPrices() {
   try {
     const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
@@ -241,12 +234,10 @@ async function fetchPrices() {
   }
 }
 
-// === CALCULATE BNB PER $1 TOKEN ===
 function getBnbPerToken() {
   return (1 / bnbPrice).toFixed(8);
 }
 
-// === UPDATE DISPLAY ===
 function updateAmount() {
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
   const cur = currencyEl.value;
@@ -273,210 +264,105 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === WALLET CONNECTION LOGIC ===
-// This keeps your original style but adds Trust injected detection + WCv2 + WCv1 fallback
-
-async function initWeb3WithProvider(_provider) {
-  try {
-    provider = _provider;
-    // Some providers expose `provider.provider` (WC v2 wrapper). Normalize:
-    if (provider && provider.provider) provider = provider.provider;
-    web3 = new Web3(provider);
-    const accounts = await web3.eth.getAccounts();
-    userAddress = accounts && accounts[0];
-    if (userAddress) {
-      addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
-      statusSmall.textContent = 'BNB Chain';
-      connectBtn.textContent = 'Connected';
-      ensureChain();
-    } else {
-      console.warn('No accounts found from provider');
-      statusSmall.textContent = 'Connected (no accounts)';
-    }
-  } catch (e) {
-    console.error('initWeb3WithProvider error', e);
-    alert('Wallet init failed: ' + (e.message || e));
-  }
-}
-
-function isMobile() {
-  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-}
-
+// === CONNECT WALLET ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
-  // 1) Trust Wallet internal browser (best)
-  try {
-    if (window.trustwallet && typeof window.trustwallet.request === 'function') {
-      try {
-        await window.trustwallet.request({ method: 'eth_requestAccounts' });
-        await initWeb3WithProvider(window.trustwallet);
-        connectBtn.disabled = false;
-        return;
-      } catch (e) {
-        console.warn('Trust injected provider present but eth_requestAccounts failed', e);
-      }
-    }
-  } catch (e) {
-    console.warn('Trust detection error', e);
+  // 1. Trust Wallet injected
+  if (window.trustwallet && typeof window.trustwallet.request === 'function') {
+    try {
+      await window.trustwallet.request({ method: 'eth_requestAccounts' });
+      await initWeb3(window.trustwallet);
+      connectBtn.disabled = false;
+      return;
+    } catch (e) { console.warn('Trust Wallet connect failed', e); }
   }
 
-  // If we are on mobile and trustwallet isn't injected, warn the user to open inside Trust's browser for best results
-  if (isMobile() && /Trust/i.test(navigator.userAgent) === false && !window.trustwallet) {
-    // If the user is on mobile but not inside the Trust Wallet app, we inform them.
-    // We do NOT block — user can continue to use WalletConnect fallback.
-    console.log('Mobile device, but not inside Trust Wallet internal browser.');
-    // (optional) show a small friendly prompt
-    // alert('If you use Trust Wallet, open this page inside the Trust Wallet app browser for the smoothest experience. Otherwise, continue to WalletConnect.');
+  // 2. MetaMask / OKX / Injected
+  if (window.ethereum && typeof window.ethereum.request === 'function') {
+    try {
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      await initWeb3(window.ethereum);
+      connectBtn.disabled = false;
+      return;
+    } catch (e) { console.warn('Injected connect failed', e); }
   }
 
-  // 2) Injected ethereum (MetaMask, Brave, etc.)
+  // 3. WalletConnect v1 fallback
   try {
-    if (window.ethereum && typeof window.ethereum.request === 'function') {
-      try {
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        await initWeb3WithProvider(window.ethereum);
-        connectBtn.disabled = false;
-        return;
-      } catch (e) {
-        console.warn('Injected ethereum connect failed', e);
-      }
-    }
-  } catch (e) {
-    console.warn('Injected ethereum detection error', e);
-  }
-
-  // 3) WalletConnect v2 via @walletconnect/ethereum-provider
-  try {
-    if (window.WalletConnectProvider && typeof window.WalletConnectProvider.init === 'function') {
-      const wcProvider = await window.WalletConnectProvider.init({
-        projectId: WC_PROJECT_ID,
-        chains: [56],
-        showQrModal: true,
-        optionalChains: [],
-        rpcMap: { 56: 'https://bsc-dataseed.binance.org/' },
-        metadata: {
-          name: 'TiffyAI Presale',
-          description: 'Connect your wallet to TiffyAI',
-          url: 'https://tiffyai.github.io',
-          icons: ['https://tiffyai.github.io/Dream-Menu/TiffyAI-Token.png']
-        }
-      });
-
-      // enable -> opens QR / deep link
-      try {
-        await wcProvider.enable();
-        await initWeb3WithProvider(wcProvider);
-        connectBtn.disabled = false;
-        return;
-      } catch (e) {
-        console.warn('WCv2 provider enable failed', e);
-      }
-    }
-  } catch (e) {
-    console.warn('WalletConnect v2 connect failed', e);
-  }
-
-  // 4) Final fallback: WalletConnect v1 provider (dynamic load)
-  try {
-    if (!window.WalletConnectProvider_v1) {
-      await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
-      // some UMD builds expose WalletConnectProvider or default
-      window.WalletConnectProvider_v1 = window.WalletConnectProvider || window.WalletConnectProvider_default || window.WalletConnectProvider_v1 || null;
-    }
-    const WCProviderV1 = window.WalletConnectProvider_v1;
-    if (WCProviderV1) {
-      const wcProv = new WCProviderV1({
-        rpc: { 56: 'https://bsc-dataseed.binance.org/' },
-        chainId: 56,
-        qrcode: true
-      });
-      await wcProv.enable();
-      await initWeb3WithProvider(wcProv);
+    await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
+    const WC = window.WalletConnectProvider || window.WalletConnectProvider.default;
+    if (WC) {
+      const wc = new WC({ rpc: { 56: 'https://bsc-dataseed.binance.org/' }, chainId: 56, qrcode: true });
+      await wc.enable();
+      await initWeb3(wc);
       connectBtn.disabled = false;
       return;
     }
-  } catch (e) {
-    console.warn('WalletConnect v1 fallback failed', e);
-  }
+  } catch (e) { console.warn('WCv1 failed', e); }
 
-  alert('No wallet could be connected. Ensure you have a mobile wallet (Trust / MetaMask) or desktop extension installed. For Trust Wallet users, opening this page inside the Trust Wallet app browser is recommended.');
+  alert('No wallet detected. Open in Trust Wallet or install MetaMask.');
   connectBtn.disabled = false;
   connectBtn.textContent = 'Connect Wallet';
 }
 
-// helper to load a script dynamically
+async function initWeb3(_provider) {
+  provider = _provider;
+  web3 = new Web3(provider);
+  const accounts = await web3.eth.getAccounts();
+  userAddress = accounts[0];
+  addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
+  statusSmall.textContent = 'BNB Chain';
+  connectBtn.textContent = 'Connected';
+  ensureChain();
+}
+
 function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector('script[src="' + src + '"]')) return resolve();
+  return new Promise((res, rej) => {
+    if (document.querySelector(`script[src="${src}"]`)) return res();
     const s = document.createElement('script');
     s.src = src;
-    s.onload = () => resolve();
-    s.onerror = (e) => reject(new Error('Failed to load ' + src));
+    s.onload = res;
+    s.onerror = rej;
     document.head.appendChild(s);
   });
 }
 
-connectBtn.addEventListener('click', connectWalletHandler);
-
-// === ENSURE CHAIN (keeps your old logic) ===
 async function ensureChain() {
-  if (!web3 || !provider) return;
   try {
     const chainId = await web3.eth.getChainId();
     if (chainId !== 56) {
-      try {
-        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
-      } catch (e) {
-        if (e && e.code === 4902) {
-          try {
-            await provider.request({ method: 'wallet_addEthereumChain', params: [{
-              chainId: '0x38', chainName: 'BNB Smart Chain',
-              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-              rpcUrls: ['https://bsc-dataseed.binance.org/'],
-              blockExplorerUrls: ['https://bscscan.com']
-            }]});
-          } catch (inner) {
-            console.warn('wallet_addEthereumChain failed', inner);
-          }
-        } else {
-          console.warn('wallet_switchEthereumChain failed', e);
-        }
-      }
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
     }
   } catch (e) {
-    console.warn('ensureChain error', e);
+    if (e.code === 4902) {
+      await provider.request({ method: 'wallet_addEthereumChain', params: [{
+        chainId: '0x38', chainName: 'BNB Smart Chain',
+        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+        blockExplorerUrls: ['https://bscscan.com']
+      }]});
+    }
   }
 }
 
-// === CREATE INVOICE ===
+connectBtn.addEventListener('click', connectWalletHandler);
+
+// === INVOICE, PAY, POLL ===
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
-  if (!web3) return alert('Web3 not ready');
-
   const currency = currencyEl.value;
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
   const bnbPerToken = parseFloat(getBnbPerToken());
   let amount = 0;
   let pricePerToken = '';
 
-  if (currency === 'BNB') {
-    amount = (qty * bnbPerToken).toFixed(6);
-    pricePerToken = bnbPerToken + ' BNB';
-  } else if (currency === 'USDT') {
-    amount = (qty * 1.0).toFixed(2);
-    pricePerToken = '1.00 USDT';
-  } else if (currency === 'BTCB') {
-    amount = ((qty * 1.0) / prices.BTC).toFixed(8);
-    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
-  }
+  if (currency === 'BNB') amount = (qty * bnbPerToken).toFixed(6), pricePerToken = bnbPerToken + ' BNB';
+  else if (currency === 'USDT') amount = (qty * 1.0).toFixed(2), pricePerToken = '1.00 USDT';
+  else amount = ((qty * 1.0) / prices.BTC).toFixed(8), pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
 
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  const qrData = currency === 'BNB'
-    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}`
-    : `\( {PRESALE_WALLET}?amount= \){amount}`;
+  const qrData = currency === 'BNB' ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}` : `\( {PRESALE_WALLET}?amount= \){amount}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
 
   payAddress.textContent = PRESALE_WALLET;
@@ -484,105 +370,51 @@ buyBtn.addEventListener('click', async () => {
   invQty.textContent = qty + ' TIFFY';
   invPrice.textContent = pricePerToken;
   invTotal.textContent = amount + ' ' + currency;
-  modalExpires.textContent = expiresAt.toLocaleString();
-  qrPlaceholder.innerHTML = `<img src="${qrUrl}" alt="Scan to Pay">`;
-
+  modalExpires.textContent = new Date(Date.now() + 15*60*1000).toLocaleString();
+  qrPlaceholder.innerHTML = `<img src="${qrUrl}" alt="Scan">`;
   payModal.classList.add('show');
-  statusSmall.textContent = 'Invoice ready';
-
-  pollForPayment(PRESALE_WALLET, amount, currency);
+  if (currency === 'BNB') pollForPayment(PRESALE_WALLET, amount);
 });
 
-// === COPY BUTTONS ===
-copyAddr.onclick = () => {
-  navigator.clipboard.writeText(PRESALE_WALLET);
-  copyAddr.textContent = 'Copied!';
-  setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500);
-};
+copyAddr.onclick = () => { navigator.clipboard.writeText(PRESALE_WALLET); copyAddr.textContent = 'Copied!'; setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500); };
+copyAmount.onclick = () => { const amt = invTotal.textContent.split(' ')[0]; navigator.clipboard.writeText(amt); copyAmount.textContent = 'Copied!'; setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500); };
 
-copyAmount.onclick = () => {
-  const amt = invTotal.textContent.split(' ')[0];
-  navigator.clipboard.writeText(amt);
-  copyAmount.textContent = 'Copied!';
-  setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500);
-};
-
-// === PAY WITH WALLET (BNB only) ===
 payWithWallet.onclick = async () => {
-  if (!provider || !userAddress) return alert('Connect wallet');
-  if (modalCurrency.textContent !== 'BNB') return alert('Use manual send for USDT/BTCB');
-
+  if (!provider || modalCurrency.textContent !== 'BNB') return alert('BNB only');
   const amount = invTotal.textContent.split(' ')[0];
   const wei = web3.utils.toWei(amount, 'ether');
-
   try {
-    const params = [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }];
-    const tx = await provider.request({
-      method: 'eth_sendTransaction',
-      params
-    });
-    alert('Payment sent! TX: ' + tx);
-    pollForPayment(PRESALE_WALLET, amount, 'BNB');
-  } catch (e) {
-    alert('Payment failed: ' + (e.message || e));
-  }
+    const tx = await provider.request({ method: 'eth_sendTransaction', params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }] });
+    alert('Sent! TX: ' + tx);
+    pollForPayment(PRESALE_WALLET, amount);
+  } catch (e) { alert('Failed: ' + e.message); }
 };
 
-// === SUBMIT TX HASH ===
 submitTx.onclick = async () => {
   const hash = txHashInput.value.trim();
-  if (!hash) return alert('Enter TX hash');
-  try {
-    const resp = await fetch(API_BASE + '/reward', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ txHash: hash, wallet: userAddress })
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      alert('Payment confirmed! Tokens issued.');
-      payModal.classList.remove('show');
-      window.location.href = '/Blue-Key-Claim';
-    } else {
-      alert('Error: ' + (data.message || 'Submit failed'));
-    }
-  } catch (e) {
-    alert('Submit failed: ' + e.message);
-  }
+  if (!hash) return alert('Enter hash');
+  const resp = await fetch(API_BASE + '/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ txHash: hash, wallet: userAddress }) });
+  const data = await resp.json();
+  resp.ok ? (alert('Confirmed!'), payModal.classList.remove('show'), location.href = '/Blue-Key-Claim') : alert('Error: ' + (data.message || 'Failed'));
 };
 
-// === POLL FOR PAYMENT (BNB only) ===
-async function pollForPayment(address, amountStr, currency) {
-  if (currency !== 'BNB') return;
-  const target = parseFloat(amountStr);
-  const interval = setInterval(async () => {
-    try {
-      const bal = await web3.eth.getBalance(address);
-      const balBNB = parseFloat(web3.utils.fromWei(bal, 'ether'));
-      if (balBNB >= target) {
-        clearInterval(interval);
-        statusSmall.textContent = 'Payment detected!';
-        await fetch(API_BASE + '/reward', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wallet: userAddress, amount: amountStr, currency })
-        });
-        alert('Tokens issued!');
-        payModal.classList.remove('show');
-        setTimeout(() => window.location.href = '/Blue-Key-Claim', 1000);
-      }
-    } catch (e) { console.log('Poll error:', e); }
+async function pollForPayment(addr, amt) {
+  const target = parseFloat(amt);
+  const int = setInterval(async () => {
+    const bal = await web3.eth.getBalance(addr);
+    if (parseFloat(web3.utils.fromWei(bal, 'ether')) >= target) {
+      clearInterval(int);
+      statusSmall.textContent = 'Paid!';
+      await fetch(API_BASE + '/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet: userAddress, amount: amt, currency: 'BNB' }) });
+      alert('Tokens issued!');
+      payModal.classList.remove('show');
+      setTimeout(() => location.href = '/Blue-Key-Claim', 1000);
+    }
   }, 8000);
 }
 
-// === CLOSE MODAL ===
-window.onclick = (e) => {
-  if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) {
-    payModal.classList.remove('show');
-  }
-};
+window.onclick = e => { if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) payModal.classList.remove('show'); };
 
-// === INIT ===
 currencyEl.addEventListener('change', updateAmount);
 qtyEl.addEventListener('input', updateAmount);
 fetchPrices();
