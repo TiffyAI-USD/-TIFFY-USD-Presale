@@ -5,6 +5,10 @@
   <title>TiffyAI Presale — Checkout</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
+
+  <!-- WalletConnect v2 UMD -->
+  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.2/dist/index.umd.min.js"></script>
+
   <style>
     :root {
       --accent1: #00f0ff;
@@ -185,6 +189,7 @@
 // === CONFIG ===
 const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA';
 const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
+const WC_PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576'; // Your Reown ID
 
 // === STATE ===
 let userAddress = null;
@@ -216,43 +221,107 @@ const payWithWallet = document.getElementById('payWithWallet');
 const submitTx = document.getElementById('submitTx');
 const txHashInput = document.getElementById('txHashInput');
 
-// === CONNECT WALLET — TRUST WALLET DAPP USES window.ethereum ===
+// === FETCH PRICES ===
+async function fetchPrices() {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
+    const data = await res.json();
+    prices.BNB = data.binancecoin.usd;
+    prices.BTC = data.bitcoin.usd;
+    prices.USDT = 1.0;
+    bnbPrice = prices.BNB;
+    updateAmount();
+  } catch (e) {
+    console.warn('Price fetch failed, using fallback');
+    prices = { BNB: 810, BTC: 95000, USDT: 1 };
+    bnbPrice = 810;
+    updateAmount();
+  }
+}
+
+function getBnbPerToken() {
+  return (1 / bnbPrice).toFixed(8);
+}
+
+function updateAmount() {
+  const qty = Math.max(1, parseInt(qtyEl.value) || 1);
+  const cur = currencyEl.value;
+  const bnbPerToken = parseFloat(getBnbPerToken());
+  let totalCrypto = 0, fmtCrypto = '', pricePerToken = '';
+
+  if (cur === 'BNB') {
+    totalCrypto = qty * bnbPerToken;
+    fmtCrypto = totalCrypto.toFixed(6);
+    pricePerToken = bnbPerToken + ' BNB';
+  } else if (cur === 'USDT') {
+    totalCrypto = qty * 1.0;
+    fmtCrypto = totalCrypto.toFixed(2);
+    pricePerToken = '1.00 USDT';
+  } else {
+    totalCrypto = (qty * 1.0) / prices.BTC;
+    fmtCrypto = totalCrypto.toFixed(8);
+    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
+  }
+
+  amountDisplay.textContent = 'Total: ' + fmtCrypto + ' ' + cur;
+  usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
+}
+
+// === CONNECT WALLET ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
   let connected = false;
 
-  // 1. window.ethereum — WORKS IN TRUST WALLET DAPP
-  if (window.ethereum) {
+  // 1. Trust Wallet (injected)
+  if (window.trustwallet?.request) {
+    try {
+      await window.trustwallet.request({ method: 'eth_requestAccounts' });
+      await initWeb3(window.trustwallet);
+      connected = true;
+    } catch (e) { console.warn('Trust failed', e); }
+  }
+
+  // 2. MetaMask / Injected
+  else if (window.ethereum?.request) {
     try {
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       await initWeb3(window.ethereum);
       connected = true;
-    } catch (e) {
-      console.warn('ethereum request failed', e);
-    }
+    } catch (e) { console.warn('Injected failed', e); }
   }
 
-  // 2. FALLBACK: WalletConnect
-  if (!connected) {
+  // 3. WalletConnect v2
+  else if (window.EthereumProvider) {
     try {
-      const { default: WalletConnectProvider } = await import('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
-      const wc = new WalletConnectProvider({
-        rpc: { 56: 'https://bsc-dataseed.binance.org/' },
-        chainId: 56,
-        qrcode: true
+      const wc = await window.EthereumProvider.init({
+        projectId: WC_PROJECT_ID,
+        chains: [56],
+        showQrModal: true,
+        rpcMap: { 56: 'https://bsc-dataseed.binance.org/' },
+        metadata: { name: 'TiffyAI', description: 'Presale', url: location.href, icons: [] }
       });
       await wc.enable();
       await initWeb3(wc);
       connected = true;
-    } catch (e) {
-      console.warn('WalletConnect failed', e);
-    }
+    } catch (e) { console.warn('WCv2 failed', e); }
+  }
+
+  // 4. WalletConnect v1 fallback
+  else {
+    try {
+      await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
+      const WC = window.WalletConnectProvider;
+      const wc = new WC({ rpc: { 56: 'https://bsc-dataseed.binance.org/' }, chainId: 56, qrcode: true });
+      await wc.enable();
+      await initWeb3(wc);
+      connected = true;
+    } catch (e) { console.warn('WCv1 failed', e); }
   }
 
   if (!connected) {
-    alert('No wallet detected. Open in Trust Wallet DApp browser.');
+    alert('No wallet found. Open in Trust Wallet or install MetaMask.');
   }
 
   connectBtn.disabled = false;
@@ -268,6 +337,17 @@ async function initWeb3(_provider) {
   statusSmall.textContent = 'BNB Chain';
   connectBtn.textContent = 'Connected';
   ensureChain();
+}
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    if (document.querySelector(`script[src="${src}"]`)) return res();
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = res;
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
 }
 
 async function ensureChain() {
@@ -290,51 +370,30 @@ async function ensureChain() {
 
 connectBtn.addEventListener('click', connectWalletHandler);
 
-// === PRICE & UI LOGIC ===
-async function fetchPrices() {
-  try {
-    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
-    const data = await res.json();
-    prices.BNB = data.binancecoin.usd;
-    prices.BTC = data.bitcoin.usd;
-    prices.USDT = 1.0;
-    bnbPrice = prices.BNB;
-    updateAmount();
-  } catch (e) {
-    prices = { BNB: 810, BTC: 95000, USDT: 1 };
-    bnbPrice = 810;
-    updateAmount();
-  }
-}
-
-function getBnbPerToken() { return (1 / bnbPrice).toFixed(8); }
-
-function updateAmount() {
-  const qty = Math.max(1, parseInt(qtyEl.value) || 1);
-  const cur = currencyEl.value;
-  const bnbPerToken = parseFloat(getBnbPerToken());
-  let totalCrypto = 0, fmtCrypto = '', pricePerToken = '';
-
-  if (cur === 'BNB') totalCrypto = qty * bnbPerToken, fmtCrypto = totalCrypto.toFixed(6), pricePerToken = bnbPerToken + ' BNB';
-  else if (cur === 'USDT') totalCrypto = qty * 1.0, fmtCrypto = totalCrypto.toFixed(2), pricePerToken = '1.00 USDT';
-  else totalCrypto = (qty * 1.0) / prices.BTC, fmtCrypto = totalCrypto.toFixed(8), pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
-
-  amountDisplay.textContent = 'Total: ' + fmtCrypto + ' ' + cur;
-  usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
-}
-
+// === CREATE INVOICE (FIXED QR) ===
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
+
   const currency = currencyEl.value;
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
   const bnbPerToken = parseFloat(getBnbPerToken());
   let amount = 0, pricePerToken = '';
 
-  if (currency === 'BNB') amount = (qty * bnbPerToken).toFixed(6), pricePerToken = bnbPerToken + ' BNB';
-  else if (currency === 'USDT') amount = (qty * 1.0).toFixed(2), pricePerToken = '1.00 USDT';
-  else amount = ((qty * 1.0) / prices.BTC).toFixed(8), pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
+  if (currency === 'BNB') {
+    amount = (qty * bnbPerToken).toFixed(6);
+    pricePerToken = bnbPerToken + ' BNB';
+  } else if (currency === 'USDT') {
+    amount = (qty * 1.0).toFixed(2);
+    pricePerToken = '1.00 USDT';
+  } else {
+    amount = ((qty * 1.0) / prices.BTC).toFixed(8);
+    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
+  }
 
-  const qrData = currency === 'BNB' ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}` : `\( {PRESALE_WALLET}?amount= \){amount}`;
+  // FIXED QR CODE
+  const qrData = currency === 'BNB'
+    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}`
+    : `\( {PRESALE_WALLET}?amount= \){amount}&token=${currency}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
 
   payAddress.textContent = PRESALE_WALLET;
@@ -345,12 +404,15 @@ buyBtn.addEventListener('click', async () => {
   modalExpires.textContent = new Date(Date.now() + 15*60*1000).toLocaleString();
   qrPlaceholder.innerHTML = `<img src="${qrUrl}" alt="Scan">`;
   payModal.classList.add('show');
+
   if (currency === 'BNB') pollForPayment(PRESALE_WALLET, amount);
 });
 
+// === COPY BUTTONS ===
 copyAddr.onclick = () => { navigator.clipboard.writeText(PRESALE_WALLET); copyAddr.textContent = 'Copied!'; setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500); };
 copyAmount.onclick = () => { const amt = invTotal.textContent.split(' ')[0]; navigator.clipboard.writeText(amt); copyAmount.textContent = 'Copied!'; setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500); };
 
+// === PAY WITH WALLET ===
 payWithWallet.onclick = async () => {
   if (!provider || modalCurrency.textContent !== 'BNB') return alert('BNB only');
   const amount = invTotal.textContent.split(' ')[0];
@@ -362,6 +424,7 @@ payWithWallet.onclick = async () => {
   } catch (e) { alert('Failed: ' + e.message); }
 };
 
+// === SUBMIT TX ===
 submitTx.onclick = async () => {
   const hash = txHashInput.value.trim();
   if (!hash) return alert('Enter hash');
@@ -370,6 +433,7 @@ submitTx.onclick = async () => {
   resp.ok ? (alert('Confirmed!'), payModal.classList.remove('show'), location.href = '/Blue-Key-Claim') : alert('Error: ' + (data.message || 'Failed'));
 };
 
+// === POLL PAYMENT ===
 async function pollForPayment(addr, amt) {
   const target = parseFloat(amt);
   const int = setInterval(async () => {
@@ -385,8 +449,10 @@ async function pollForPayment(addr, amt) {
   }, 8000);
 }
 
+// === CLOSE MODAL ===
 window.onclick = e => { if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) payModal.classList.remove('show'); };
 
+// === INIT ===
 currencyEl.addEventListener('change', updateAmount);
 qtyEl.addEventListener('input', updateAmount);
 fetchPrices();
