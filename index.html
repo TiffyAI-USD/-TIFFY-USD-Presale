@@ -216,80 +216,44 @@ const payWithWallet = document.getElementById('payWithWallet');
 const submitTx = document.getElementById('submitTx');
 const txHashInput = document.getElementById('txHashInput');
 
-// === PRICES ===
-async function fetchPrices() {
-  try {
-    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
-    const data = await res.json();
-    prices.BNB = data.binancecoin.usd;
-    prices.BTC = data.bitcoin.usd;
-    prices.USDT = 1.0;
-    bnbPrice = prices.BNB;
-    updateAmount();
-  } catch (e) {
-    console.warn('Using fallback prices');
-    prices = { BNB: 810, BTC: 95000, USDT: 1 };
-    bnbPrice = 810;
-    updateAmount();
+// === WAIT FOR TRUST WALLET (CRITICAL FIX) ===
+async function waitForTrustWallet(maxAttempts = 20) {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (window.trustwallet && typeof window.trustwallet.request === 'function') {
+      return window.trustwallet;
+    }
+    await new Promise(r => setTimeout(r, 200));
   }
-}
-
-function getBnbPerToken() {
-  return (1 / bnbPrice).toFixed(8);
-}
-
-function updateAmount() {
-  const qty = Math.max(1, parseInt(qtyEl.value) || 1);
-  const cur = currencyEl.value;
-  const bnbPerToken = parseFloat(getBnbPerToken());
-  let totalCrypto = 0;
-  let fmtCrypto = '';
-  let pricePerToken = '';
-
-  if (cur === 'BNB') {
-    totalCrypto = qty * bnbPerToken;
-    fmtCrypto = totalCrypto.toFixed(6);
-    pricePerToken = bnbPerToken + ' BNB';
-  } else if (cur === 'USDT') {
-    totalCrypto = qty * 1.0;
-    fmtCrypto = totalCrypto.toFixed(2);
-    pricePerToken = '1.00 USDT';
-  } else if (cur === 'BTCB') {
-    totalCrypto = (qty * 1.0) / prices.BTC;
-    fmtCrypto = totalCrypto.toFixed(8);
-    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
-  }
-
-  amountDisplay.textContent = 'Total: ' + fmtCrypto + ' ' + cur;
-  usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
+  return null;
 }
 
 // === CONNECT WALLET ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
-  connectBtn.textContent = 'Connecting...';
+  connectBtn.textContent = 'Detecting...';
 
-  // 1. Trust Wallet injected
-  if (window.trustwallet && typeof window.trustwallet.request === 'function') {
+  // 1. WAIT FOR TRUST WALLET
+  const trust = await waitForTrustWallet();
+  if (trust) {
     try {
-      await window.trustwallet.request({ method: 'eth_requestAccounts' });
-      await initWeb3(window.trustwallet);
+      await trust.request({ method: 'eth_requestAccounts' });
+      await initWeb3(trust);
       connectBtn.disabled = false;
       return;
-    } catch (e) { console.warn('Trust Wallet connect failed', e); }
+    } catch (e) { console.warn('Trust failed', e); }
   }
 
-  // 2. MetaMask / OKX / Injected
-  if (window.ethereum && typeof window.ethereum.request === 'function') {
+  // 2. FALLBACK: Injected (MetaMask, OKX)
+  if (window.ethereum) {
     try {
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       await initWeb3(window.ethereum);
       connectBtn.disabled = false;
       return;
-    } catch (e) { console.warn('Injected connect failed', e); }
+    } catch (e) { console.warn('Injected failed', e); }
   }
 
-  // 3. WalletConnect v1 fallback
+  // 3. WALLET CONNECT V1
   try {
     await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
     const WC = window.WalletConnectProvider || window.WalletConnectProvider.default;
@@ -300,9 +264,9 @@ async function connectWalletHandler() {
       connectBtn.disabled = false;
       return;
     }
-  } catch (e) { console.warn('WCv1 failed', e); }
+  } catch (e) { console.warn('WC failed', e); }
 
-  alert('No wallet detected. Open in Trust Wallet or install MetaMask.');
+  alert('Open in Trust Wallet DApp browser or install MetaMask.');
   connectBtn.disabled = false;
   connectBtn.textContent = 'Connect Wallet';
 }
@@ -349,14 +313,45 @@ async function ensureChain() {
 
 connectBtn.addEventListener('click', connectWalletHandler);
 
-// === INVOICE, PAY, POLL ===
+// === REST OF CODE (unchanged) ===
+async function fetchPrices() {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
+    const data = await res.json();
+    prices.BNB = data.binancecoin.usd;
+    prices.BTC = data.bitcoin.usd;
+    prices.USDT = 1.0;
+    bnbPrice = prices.BNB;
+    updateAmount();
+  } catch (e) {
+    prices = { BNB: 810, BTC: 95000, USDT: 1 };
+    bnbPrice = 810;
+    updateAmount();
+  }
+}
+
+function getBnbPerToken() { return (1 / bnbPrice).toFixed(8); }
+
+function updateAmount() {
+  const qty = Math.max(1, parseInt(qtyEl.value) || 1);
+  const cur = currencyEl.value;
+  const bnbPerToken = parseFloat(getBnbPerToken());
+  let totalCrypto = 0, fmtCrypto = '', pricePerToken = '';
+
+  if (cur === 'BNB') totalCrypto = qty * bnbPerToken, fmtCrypto = totalCrypto.toFixed(6), pricePerToken = bnbPerToken + ' BNB';
+  else if (cur === 'USDT') totalCrypto = qty * 1.0, fmtCrypto = totalCrypto.toFixed(2), pricePerToken = '1.00 USDT';
+  else totalCrypto = (qty * 1.0) / prices.BTC, fmtCrypto = totalCrypto.toFixed(8), pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
+
+  amountDisplay.textContent = 'Total: ' + fmtCrypto + ' ' + cur;
+  usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
+}
+
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
   const currency = currencyEl.value;
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
   const bnbPerToken = parseFloat(getBnbPerToken());
-  let amount = 0;
-  let pricePerToken = '';
+  let amount = 0, pricePerToken = '';
 
   if (currency === 'BNB') amount = (qty * bnbPerToken).toFixed(6), pricePerToken = bnbPerToken + ' BNB';
   else if (currency === 'USDT') amount = (qty * 1.0).toFixed(2), pricePerToken = '1.00 USDT';
