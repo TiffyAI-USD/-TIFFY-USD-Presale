@@ -216,9 +216,14 @@ const payWithWallet = document.getElementById('payWithWallet');
 const submitTx = document.getElementById('submitTx');
 const txHashInput = document.getElementById('txHashInput');
 
-// === WAIT FOR TRUST WALLET (CRITICAL FIX) ===
-async function waitForTrustWallet(maxAttempts = 20) {
-  for (let i = 0; i < maxAttempts; i++) {
+// === DETECT TRUST WALLET BROWSER ===
+function isInTrustWalletBrowser() {
+  return /Trust/i.test(navigator.userAgent) || /TrustWallet/i.test(navigator.userAgent);
+}
+
+// === WAIT FOR TRUST WALLET (10 SECONDS) ===
+async function waitForTrustWallet() {
+  for (let i = 0; i < 50; i++) {  // 10 seconds
     if (window.trustwallet && typeof window.trustwallet.request === 'function') {
       return window.trustwallet;
     }
@@ -230,45 +235,58 @@ async function waitForTrustWallet(maxAttempts = 20) {
 // === CONNECT WALLET ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
-  connectBtn.textContent = 'Detecting...';
+  connectBtn.textContent = 'Connecting...';
 
-  // 1. WAIT FOR TRUST WALLET
-  const trust = await waitForTrustWallet();
-  if (trust) {
-    try {
-      await trust.request({ method: 'eth_requestAccounts' });
-      await initWeb3(trust);
-      connectBtn.disabled = false;
-      return;
-    } catch (e) { console.warn('Trust failed', e); }
+  let connected = false;
+
+  // 1. TRUST WALLET (PRIORITY)
+  if (isInTrustWalletBrowser()) {
+    const trust = await waitForTrustWallet();
+    if (trust) {
+      try {
+        await trust.request({ method: 'eth_requestAccounts' });
+        await initWeb3(trust);
+        connected = true;
+      } catch (e) { console.warn('Trust failed', e); }
+    }
   }
 
-  // 2. FALLBACK: Injected (MetaMask, OKX)
-  if (window.ethereum) {
+  // 2. INJECTED (MetaMask, OKX)
+  if (!connected && window.ethereum) {
     try {
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       await initWeb3(window.ethereum);
-      connectBtn.disabled = false;
-      return;
+      connected = true;
     } catch (e) { console.warn('Injected failed', e); }
   }
 
   // 3. WALLET CONNECT V1
-  try {
-    await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
-    const WC = window.WalletConnectProvider || window.WalletConnectProvider.default;
-    if (WC) {
-      const wc = new WC({ rpc: { 56: 'https://bsc-dataseed.binance.org/' }, chainId: 56, qrcode: true });
-      await wc.enable();
-      await initWeb3(wc);
-      connectBtn.disabled = false;
+  if (!connected) {
+    try {
+      await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
+      const WC = window.WalletConnectProvider || window.WalletConnectProvider.default;
+      if (WC) {
+        const wc = new WC({ rpc: { 56: 'https://bsc-dataseed.binance.org/' }, chainId: 56, qrcode: true });
+        await wc.enable();
+        await initWeb3(wc);
+        connected = true;
+      }
+    } catch (e) { console.warn('WC failed', e); }
+  }
+
+  if (!connected) {
+    // ONLY SHOW ALERT IF NOT IN TRUST
+    if (!isInTrustWalletBrowser()) {
+      alert('Open in Trust Wallet DApp browser or install MetaMask.');
+    } else {
+      statusSmall.textContent = 'Trust detected — retrying...';
+      setTimeout(connectWalletHandler, 2000);  // auto-retry
       return;
     }
-  } catch (e) { console.warn('WC failed', e); }
+  }
 
-  alert('Open in Trust Wallet DApp browser or install MetaMask.');
   connectBtn.disabled = false;
-  connectBtn.textContent = 'Connect Wallet';
+  connectBtn.textContent = connected ? 'Connected' : 'Connect Wallet';
 }
 
 async function initWeb3(_provider) {
@@ -313,7 +331,7 @@ async function ensureChain() {
 
 connectBtn.addEventListener('click', connectWalletHandler);
 
-// === REST OF CODE (unchanged) ===
+// === REST UNCHANGED ===
 async function fetchPrices() {
   try {
     const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
