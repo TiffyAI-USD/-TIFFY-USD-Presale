@@ -106,12 +106,12 @@
     </div>
 
     <div id="amountDisplay">Total: 0.001 BNB</div>
-    <div class="muted">We will generate an invoice for the chosen currency. After your payment is detected, your tokens will be issued automatically.</div>
+    <div class="muted">Send payment to the address below. Tokens issued after confirmation.</div>
   </div>
 
   <div id="payModal" class="modal" role="dialog" aria-hidden="true">
     <div style="display:flex; justify-content:space-between; align-items:center;">
-      <div style="font-weight:800; font-size:18px;" id="modalTitle">Send payment</div>
+      <div style="font-weight:800; font-size:18px;" id="modalTitle">Send Payment</div>
       <div id="modalCurrency" style="opacity:0.95;">BNB</div>
     </div>
 
@@ -119,7 +119,7 @@
       <div style="flex:1 1 60%;">
         <div class="addr" id="payAddress">—</div>
         <div class="muted" id="payAmount">—</div>
-        <div class="muted" id="modalExpires">Invoice expires in: —</div>
+        <div class="muted" id="modalExpires">Expires in: —</div>
       </div>
 
       <div style="display:flex; flex-direction:column; gap:10px; align-items:center;">
@@ -130,7 +130,7 @@
     </div>
 
     <div class="actions">
-      <div style="font-size:13px; opacity:0.9;">When you complete payment, we will detect it automatically. You can also paste TX hash manually once you have it.</div>
+      <div style="font-size:13px; opacity:0.9;">Paste TX hash once sent (optional). We auto-detect payments.</div>
 
       <div style="display:flex; gap:8px;">
         <input id="txHashInput" placeholder="Paste tx hash (optional)" style="padding:10px;border-radius:10px;border:none;background:rgba(255,255,255,0.03);min-width:240px;color:white" />
@@ -140,6 +140,9 @@
   </div>
 
 <script>
+// CHANGE THIS TO YOUR PRESALE WALLET
+const PRESALE_WALLET = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'; // ← YOUR WALLET
+
 const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
 let userAddress = null;
 
@@ -179,42 +182,62 @@ connectBtn.addEventListener('click', async () => {
     await window.ethereum.request({ method: 'eth_requestAccounts' });
     const accounts = await window.ethereum.request({ method: 'eth_accounts' });
     userAddress = accounts[0];
+
+    // SWITCH TO BNB CHAIN
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x38' }],
+      });
+    } catch (e) {
+      if (e.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x38',
+            chainName: 'BNB Smart Chain',
+            nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+            rpcUrls: ['https://bsc-dataseed.binance.org/'],
+            blockExplorerUrls: ['https://bscscan.com']
+          }],
+        });
+      }
+    }
+
     addrDisplay.innerText = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
-    statusSmall.innerText = 'Connected';
-    connectBtn.innerText = 'Connected';
+    statusSmall.innerText = 'BNB Chain';
+    connectBtn.innerText = 'BNB Chain';
   } catch (e) {
-    alert('Connect failed');
+    alert('Wallet connect failed');
   }
 });
 
 buyBtn.addEventListener('click', async () => {
-  if (!userAddress) return alert('Connect wallet');
+  if (!userAddress) return alert('Connect wallet first');
   const currency = currencyEl.value;
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
+  const prices = { BNB: 0.001, USDT: 1.0, BTCB: 0.000014 };
+  const amount = (qty * prices[currency]).toFixed(6);
 
-  try {
-    statusSmall.innerText = 'Creating invoice...';
-    const resp = await fetch(API_BASE + '/create-invoice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet: userAddress, currency, qty })
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.message || 'Failed');
+  const invoice = {
+    payToAddress: PRESALE_WALLET,
+    amount: amount,
+    currency: currency,
+    expiresAt: new Date(Date.now() + 15*60*1000), // 15 min
+    qr: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=BNB:\( {PRESALE_WALLET}?amount= \){amount}`
+  };
 
-    payModal.classList.add('show');
-    modalCurrency.innerText = data.currency;
-    payAddress.innerText = data.payToAddress;
-    payAmount.innerText = 'Amount: ' + data.amount + ' ' + data.currency;
-    modalExpires.innerText = 'Expires: ' + new Date(data.expiresAt).toLocaleString();
-    qrPlaceholder.innerHTML = data.qr ? '<img src="' + data.qr + '" style="width:100%;height:100%;border-radius:8px">' : 'QR';
-    payModal.dataset.invoiceId = data.invoiceId;
-    statusSmall.innerText = 'Invoice ready';
-    pollInvoiceStatus(data.invoiceId);
-  } catch (err) {
-    alert('Invoice failed: ' + err.message);
-    statusSmall.innerText = 'Error';
-  }
+  payModal.classList.add('show');
+  modalCurrency.innerText = invoice.currency;
+  payAddress.innerText = invoice.payToAddress;
+  payAmount.innerText = 'Amount: ' + invoice.amount + ' ' + invoice.currency;
+  modalExpires.innerText = 'Expires: ' + invoice.expiresAt.toLocaleString();
+  qrPlaceholder.innerHTML = `<img src="${invoice.qr}" style="width:100%;height:100%;border-radius:8px">`;
+  payModal.dataset.invoiceId = 'presale-' + Date.now();
+  statusSmall.innerText = 'Send payment...';
+
+  // AUTO CHECK FOR PAYMENT
+  pollForPayment(invoice.payToAddress, invoice.amount);
 });
 
 copyAddr.onclick = () => {
@@ -231,37 +254,53 @@ copyAmount.onclick = () => {
 };
 
 submitTx.onclick = async () => {
-  const id = payModal.dataset.invoiceId;
   const hash = txHashInput.value.trim();
   if (!hash) return alert('Enter TX hash');
   try {
-    const url = API_BASE + '/invoice/' + id + '/submit-tx';
-    const resp = await fetch(url, {
+    const resp = await fetch(API_BASE + '/reward', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ txHash: hash })
+      body: JSON.stringify({ txHash: hash, wallet: userAddress })
     });
-    if (!resp.ok) throw new Error('Failed');
-    alert('TX submitted');
-  } catch { alert('Submit failed'); }
+    const data = await resp.json();
+    if (resp.ok) {
+      alert('Payment confirmed! Tokens issued.');
+      payModal.classList.remove('show');
+      window.location.href = '/Blue-Key-Claim';
+    } else {
+      alert('Error: ' + (data.message || 'Submit failed'));
+    }
+  } catch {
+    alert('Submit failed');
+  }
 };
 
-const polling = {};
-function pollInvoiceStatus(id) {
-  if (polling[id]) return;
-  polling[id] = setInterval(async () => {
+function pollForPayment(address, amount) {
+  const interval = setInterval(async () => {
     try {
-      const url = API_BASE + '/invoice/' + id;
-      const resp = await fetch(url);
+      const resp = await fetch(`https://api.bscscan.com/api?module=account&action=txlist&address=${address}&sort=desc&apikey=YourApiKey`);
       const data = await resp.json();
-      statusSmall.innerText = 'Status: ' + data.status;
-      if (data.status === 'rewarded') {
-        clearInterval(polling[id]);
-        payModal.classList.remove('show');
-        alert('Tokens issued!');
-        window.location.href = '/Blue-Key-Claim';
+      if (data.status === '1') {
+        const tx = data.result.find(t =>
+          t.to.toLowerCase() === address.toLowerCase() &&
+          parseFloat(t.value) / 1e18 >= parseFloat(amount)
+        );
+        if (tx) {
+          clearInterval(interval);
+          statusSmall.innerText = 'Payment detected!';
+          await fetch(API_BASE + '/reward', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ txHash: tx.hash, wallet: userAddress })
+          });
+          alert('Tokens issued!');
+          payModal.classList.remove('show');
+          window.location.href = '/Blue-Key-Claim';
+        }
       }
-    } catch {}
+    } catch (e) {
+      console.log('Poll error:', e);
+    }
   }, 6000);
 }
 
