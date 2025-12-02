@@ -76,7 +76,7 @@
     .invoice-line {
       display: flex; justify-content: space-between; padding: 8px 0; font-size: 15px; border-bottom: 1px dashed rgba(255,255,255,0.15);
     }
-    .invoice-line:last-child { border-bottom: none; font-weight: 700; color: var(--accent1); }
+    .invoice-line:last-child { border-bottom: none; font-weight: 700; color:var(--accent1); }
 
     .addr {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
@@ -270,24 +270,17 @@ function updateAmount() {
 }
 
 // === WEB3MODAL + WALLET CONNECT ===
-async function initWeb3Modal() {
+function initWeb3Modal() {
+  if (web3Modal) return;
+
   const providerOptions = {
     walletconnect: {
       package: WalletConnectProvider,
       options: {
         rpc: { 56: 'https://bsc-dataseed.binance.org/' },
         chainId: 56,
-        qrcode: true,
-        infuraId: null
+        qrcode: true
       }
-    },
-    injected: {
-      display: {
-        logo: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMGg1djJoNHYtMmgyYzUuNTIgMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnoiLz48L3N2Zz4=",
-        name: "Browser Wallet",
-        description: "Connect with MetaMask, Trust Wallet, etc."
-      },
-      package: null
     }
   };
 
@@ -299,7 +292,7 @@ async function initWeb3Modal() {
 }
 
 connectBtn.addEventListener('click', async () => {
-  if (!web3Modal) await initWeb3Modal();
+  initWeb3Modal();
 
   try {
     provider = await web3Modal.connect();
@@ -314,13 +307,13 @@ connectBtn.addEventListener('click', async () => {
 
     ensureChain();
   } catch (e) {
-    console.error(e);
-    alert('Wallet connection failed: ' + e.message);
+    console.error('Connection failed:', e);
+    alert('Wallet connection failed. Try again.');
   }
 });
 
 async function ensureChain() {
-  if (!web3) return;
+  if (!web3 || !provider) return;
   try {
     const chainId = await web3.eth.getChainId();
     if (chainId !== 56) {
@@ -483,6 +476,8 @@ currencyEl.addEventListener('change', updateAmount);
 qtyEl.addEventListener('input', updateAmount);
 fetchPrices();
 setInterval(fetchPrices, 30000);
+
+// Initialize Web3Modal only when needed
 initWeb3Modal();
 </script>
 </body>
