@@ -1,479 +1,221 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>TiffyAI Presale — Checkout</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <!-- Web3 + WalletConnect v1 -->
-  <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-  <style>
-    :root {
-      --accent1: #00f0ff;
-      --accent2: #ff00d4;
-      --glass: rgba(255,255,255,0.06);
-      --glass-border: rgba(255,255,255,0.12);
-      --muted: rgba(255,255,255,0.85);
-      --text: #e8fbff;
-    }
-    body {
-      margin: 0;
-      font-family: Inter, Poppins, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
-      background: url('Presale1.jpg') center/cover fixed no-repeat;
-      color: white;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      min-height:100vh;
-      padding:18px;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TiffyAI — Wallet Connect</title>
 
-    .wrap {
-      width: 100%;
-      max-width: 820px;
-      border-radius: 16px;
-      padding: 22px;
-      background: linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.18));
-      border: 1px solid rgba(255,255,255,0.04);
-      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-      backdrop-filter: blur(4px);
-    }
-    .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-    .brand { display:flex; align-items:center; gap:12px; }
-    .logo { width:64px;height:64px;border-radius:12px;background:linear-gradient(135deg,var(--accent1),var(--accent2)); display:flex;align-items:center;justify-content:center;font-weight:800; font-size:20px; color:#001; }
-    h1 { margin:0; font-size:20px; }
-    p.lead { margin:4px 0 0 0; opacity:0.95; font-size:13px; }
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #0b0b0b;
+    color: white;
+    text-align: center;
+    padding: 30px;
+  }
+  #connectBtn {
+    padding: 12px 22px;
+    background: #ff0080;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+  }
+  #connectBtn:disabled {
+    opacity: 0.6;
+  }
+  .info {
+    margin-top: 20px;
+    font-size: 16px;
+  }
+</style>
 
-    .controls { display:flex; gap:12px; margin-top:18px; flex-wrap:wrap; align-items:center; justify-content:center; }
-    select, input[type="number"] {
-      padding:12px; border-radius:10px; border:none; background: rgba(255,255,255,0.04); color:var(--muted); font-size:16px; min-width:170px;
-    }
-    .btn {
-      padding:12px 18px; border-radius:12px; border:none; cursor:pointer; font-weight:700; font-size:16px;
-    }
-    .connect { background: rgba(255,255,255,0.06); color: #fff; }
-    .buy { background: linear-gradient(135deg,var(--accent1),var(--accent2)); color: #062; }
+<!-- Web3 -->
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
 
-    #amountDisplay { margin-top:14px; text-align:center; font-weight:800; color:var(--accent1); font-size:18px; }
-    #usdDisplay { margin-top:4px; text-align:center; opacity:0.8; font-size:14px; }
-
-    .modal {
-      position: fixed; left:50%; top:50%; transform: translate(-50%, -50%);
-      width: 96%; max-width:520px; border-radius:14px; padding:20px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-      border: 1px solid var(--glass-border); backdrop-filter: blur(10px); box-shadow: 0 30px 80px rgba(0,0,0,0.7);
-      z-index:1000; display:none; color: white;
-    }
-    .modal.show { display:block; }
-
-    .invoice-header {
-      display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
-      font-size: 18px; font-weight: 800;
-    }
-    .invoice-header .currency { font-weight: 600; opacity: 0.9; }
-
-    .invoice-line {
-      display: flex; justify-content: space-between; padding: 8px 0; font-size: 15px; border-bottom: 1px dashed rgba(255,255,255,0.15);
-    }
-    .invoice-line:last-child { border-bottom: none; font-weight: 700; color:var(--accent1); }
-
-    .addr {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
-      font-size: 16px; padding: 14px; background: rgba(0,0,0,0.3); border-radius: 12px;
-      word-break: break-all; color: var(--text); margin: 16px 0;
-      text-align: center;
-    }
-
-    .qr { width:140px; height:140px; margin: 16px auto; border-radius:12px; overflow:hidden; background:white; padding:8px; }
-    .qr img { width:100%; height:100%; }
-
-    .glow {
-      background: linear-gradient(135deg, #00f0ff, #ff00d4);
-      color: #001; font-weight: 800; padding: 14px 20px; border-radius: 16px; border: none;
-      box-shadow: 0 0 20px rgba(0,240,255,0.6), 0 0 40px rgba(255,0,212,0.4), 0 8px 16px rgba(0,0,0,0.3);
-      transition: all 0.3s ease; font-size: 16px; min-width: 200px; text-transform: uppercase; letter-spacing: 1px;
-    }
-    .glow:hover { transform: translateY(-3px); box-shadow: 0 0 30px rgba(0,240,255,0.8), 0 0 60px rgba(255,0,212,0.6); }
-
-    .actions { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
-    .actions button { width: 100%; }
-
-    .muted { color: rgba(255,255,255,0.75); font-size:13px; margin-top:8px; text-align:center; }
-
-    @media (max-width:520px) {
-      .logo{ width:56px;height:56px; }
-      .addr { font-size:18px; padding:16px; }
-      .qr { width:120px;height:120px; }
-      .modal { padding:16px; }
-      .btn { font-size:15px; padding:11px 13px; }
-    }
-  </style>
 </head>
 <body>
 
-  <div class="wrap">
-    <div class="header">
-      <div class="brand">
-        <div class="logo">TI</div>
-        <div>
-          <h1>TiffyAI — Presale Checkout</h1>
-          <p class="lead">1 TIFFY = $1.00 USD (live BNB rate)</p>
-        </div>
-      </div>
-      <div id="userMeta" style="text-align:right;">
-        <div id="addrDisplay">Not connected</div>
-        <div id="statusSmall" style="font-size:12px; opacity:0.85;">Ready</div>
-      </div>
-    </div>
+<h2>TiffyAI — DApp Loader</h2>
+<button id="connectBtn">Connect Wallet</button>
 
-    <div class="controls">
-      <select id="currency">
-        <option value="BNB">BNB (native)</option>
-        <option value="USDT">USDT (BEP-20)</option>
-        <option value="BTCB">BTCB (BEP-20)</option>
-      </select>
-
-      <input id="qty" type="number" min="1" value="1" placeholder="Quantity" />
-
-      <button id="connectBtn" class="btn connect">Connect Wallet</button>
-      <button id="buyBtn" class="btn buy">Create Invoice</button>
-    </div>
-
-    <div id="amountDisplay">Loading price...</div>
-    <div id="usdDisplay">≈ $1.00 USD per token</div>
-    <div class="muted">Tokens issued instantly after payment.</div>
-  </div>
-
-  <!-- INVOICE MODAL -->
-  <div id="payModal" class="modal" role="dialog">
-    <div class="invoice-header">
-      <div>Payment Invoice</div>
-      <div class="currency" id="modalCurrency">BNB</div>
-    </div>
-
-    <div class="addr" id="payAddress">—</div>
-
-    <div id="invoiceLines">
-      <div class="invoice-line">
-        <span>Quantity</span>
-        <span id="invQty">—</span>
-      </div>
-      <div class="invoice-line">
-        <span>Price per token</span>
-        <span id="invPrice">—</span>
-      </div>
-      <div class="invoice-line">
-        <span>Total Due</span>
-        <span id="invTotal">—</span>
-      </div>
-    </div>
-
-    <div style="margin:16px 0; text-align:center; font-size:13px; opacity:0.8;">
-      Expires: <span id="modalExpires">—</span>
-    </div>
-
-    <div class="qr" id="qrPlaceholder"><div style="color:#666; font-size:12px;">QR</div></div>
-
-    <div class="actions">
-      <button class="glow" id="copyAddr">Copy Wallet Address</button>
-      <button class="glow" id="copyAmount">Copy Amount</button>
-      <button id="payWithWallet" class="btn buy">Pay with Wallet</button>
-      <button id="submitTx" class="btn connect">Submit TX Hash</button>
-      <input id="txHashInput" placeholder="Paste transaction hash (optional)" style="margin-top:8px; padding:10px; border-radius:10px; border:none; background:rgba(255,255,255,0.03); width:100%; color:white; font-size:14px;" />
-    </div>
-  </div>
+<div class="info">
+  <div id="addrDisplay">Not connected</div>
+  <small id="statusSmall"></small>
+</div>
 
 <script>
-// === CONFIG ===
-const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA';
-const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
+/* CONFIG */
+const CONNECT_CONFIG = {
+  wcProjectId: 'bf40c7dcdb05f06f2769573103007576', // YOUR PROJECT ID ✔
+  rpc: { 56: 'https://bsc-dataseed.binance.org/' },
+  chainId: 56,
+  chainHex: '0x38',
+  chainNamespaceId: 'eip155:56'
+};
 
-// === STATE ===
+let provider = null;
 let web3 = null;
 let userAddress = null;
-let provider = null;
 
-// === DOM ELEMENTS ===
 const connectBtn = document.getElementById('connectBtn');
-const buyBtn = document.getElementById('buyBtn');
-const currencyEl = document.getElementById('currency');
-const qtyEl = document.getElementById('qty');
-const amountDisplay = document.getElementById('amountDisplay');
-const usdDisplay = document.getElementById('usdDisplay');
 const addrDisplay = document.getElementById('addrDisplay');
 const statusSmall = document.getElementById('statusSmall');
-const payModal = document.getElementById('payModal');
-const payAddress = document.getElementById('payAddress');
-const modalCurrency = document.getElementById('modalCurrency');
-const modalExpires = document.getElementById('modalExpires');
-const invQty = document.getElementById('invQty');
-const invPrice = document.getElementById('invPrice');
-const invTotal = document.getElementById('invTotal');
-const qrPlaceholder = document.getElementById('qrPlaceholder');
-const copyAddr = document.getElementById('copyAddr');
-const copyAmount = document.getElementById('copyAmount');
-const payWithWallet = document.getElementById('payWithWallet');
-const submitTx = document.getElementById('submitTx');
-const txHashInput = document.getElementById('txHashInput');
 
-// === LIVE PRICES ===
-let prices = { BNB: 810, USDT: 1, BTC: 95000 };
-let bnbPrice = 810;
+/* MAIN CONNECT FUNCTION */
+async function connectWallet() {
 
-async function fetchPrices() {
-  try {
-    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
-    const data = await res.json();
-    prices.BNB = data.binancecoin.usd;
-    prices.BTC = data.bitcoin.usd;
-    prices.USDT = 1.0;
-    bnbPrice = prices.BNB;
-    updateAmount();
-  } catch (e) {
-    console.warn('Using fallback prices');
-    prices = { BNB: 810, BTC: 95000, USDT: 1 };
-    bnbPrice = 810;
-    updateAmount();
-  }
-}
-
-function getBnbPerToken() {
-  return (1 / bnbPrice).toFixed(8);
-}
-
-function updateAmount() {
-  const qty = Math.max(1, parseInt(qtyEl.value) || 1);
-  const cur = currencyEl.value;
-  const bnbPerToken = parseFloat(getBnbPerToken());
-  let totalCrypto = 0;
-  let fmtCrypto = '';
-  let pricePerToken = '';
-
-  if (cur === 'BNB') {
-    totalCrypto = qty * bnbPerToken;
-    fmtCrypto = totalCrypto.toFixed(6);
-    pricePerToken = bnbPerToken + ' BNB';
-  } else if (cur === 'USDT') {
-    totalCrypto = qty * 1.0;
-    fmtCrypto = totalCrypto.toFixed(2);
-    pricePerToken = '1.00 USDT';
-  } else if (cur === 'BTCB') {
-    totalCrypto = (qty * 1.0) / prices.BTC;
-    fmtCrypto = totalCrypto.toFixed(8);
-    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
-  }
-
-  amountDisplay.textContent = 'Total: ' + fmtCrypto + ' ' + cur;
-  usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
-}
-
-// === CONNECT WALLET ===
-connectBtn.addEventListener('click', async () => {
-  // Try MetaMask / Trust Wallet / OKX (injected)
-  if (window.ethereum) {
+  /* 1) METAMASK / INJECTED */
+  if (window.ethereum && window.ethereum.isMetaMask) {
     try {
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       provider = window.ethereum;
       web3 = new Web3(provider);
       const accounts = await web3.eth.getAccounts();
       userAddress = accounts[0];
-      updateWalletUI();
-      await ensureChain();
+      onConnected('MetaMask / Injected');
       return;
     } catch (e) {
-      alert('Wallet connection failed: ' + e.message);
+      console.warn('MetaMask failed, trying WC2');
     }
   }
 
-  // Fallback: WalletConnect
-  if (typeof WalletConnectProvider !== 'undefined') {
-    try {
-      const wc = new WalletConnectProvider({
-        rpc: { 56: 'https://bsc-dataseed.binance.org/' },
-        chainId: 56,
-        qrcode: true
-      });
-      await wc.enable();
-      provider = wc;
-      web3 = new Web3(wc);
-      const accounts = await web3.eth.getAccounts();
-      userAddress = accounts[0];
-      updateWalletUI();
-      await ensureChain();
-    } catch (e) {
-      alert('WalletConnect failed: ' + e.message);
-    }
-  } else {
-    alert('No wallet detected. Install Trust Wallet or MetaMask.');
-  }
-});
-
-function updateWalletUI() {
-  addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
-  statusSmall.textContent = 'BNB Chain';
-  connectBtn.textContent = 'BNB Chain';
-}
-
-async function ensureChain() {
-  if (!web3 || !provider) return;
+  /* 2) WalletConnect v2 (Reown) */
   try {
-    const chainId = await web3.eth.getChainId();
-    if (chainId !== 56) {
-      await provider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x38' }]
-      });
+    if (!window.SignClient) {
+      await loadScript("https://unpkg.com/@walletconnect/sign-client/dist/sign-client.min.js");
     }
-  } catch (e) {
-    if (e.code === 4902) {
-      await provider.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: '0x38',
-          chainName: 'BNB Smart Chain',
-          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-          rpcUrls: ['https://bsc-dataseed.binance.org/'],
-          blockExplorerUrls: ['https://bscscan.com']
-        }]
-      });
-    }
-  }
-}
 
-// === CREATE INVOICE ===
-buyBtn.addEventListener('click', async () => {
-  if (!userAddress) return alert('Connect wallet first');
-  if (!web3) return alert('Web3 not ready');
-
-  const currency = currencyEl.value;
-  const qty = Math.max(1, parseInt(qtyEl.value) || 1);
-  const bnbPerToken = parseFloat(getBnbPerToken());
-  let amount = 0;
-  let pricePerToken = '';
-
-  if (currency === 'BNB') {
-    amount = (qty * bnbPerToken).toFixed(6);
-    pricePerToken = bnbPerToken + ' BNB';
-  } else if (currency === 'USDT') {
-    amount = (qty * 1.0).toFixed(2);
-    pricePerToken = '1.00 USDT';
-  } else if (currency === 'BTCB') {
-    amount = ((qty * 1.0) / prices.BTC).toFixed(8);
-    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
-  }
-
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  const qrData = currency === 'BNB'
-    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}`
-    : `\( {PRESALE_WALLET}?amount= \){amount}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
-
-  payAddress.textContent = PRESALE_WALLET;
-  modalCurrency.textContent = currency;
-  invQty.textContent = qty + ' TIFFY';
-  invPrice.textContent = pricePerToken;
-  invTotal.textContent = amount + ' ' + currency;
-  modalExpires.textContent = expiresAt.toLocaleString();
-  qrPlaceholder.innerHTML = `<img src="${qrUrl}" alt="Scan to Pay">`;
-
-  payModal.classList.add('show');
-  statusSmall.textContent = 'Invoice ready';
-
-  if (currency === 'BNB') pollForPayment(PRESALE_WALLET, amount);
-});
-
-// === COPY BUTTONS ===
-copyAddr.onclick = () => {
-  navigator.clipboard.writeText(PRESALE_WALLET);
-  copyAddr.textContent = 'Copied!';
-  setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500);
-};
-
-copyAmount.onclick = () => {
-  const amt = invTotal.textContent.split(' ')[0];
-  navigator.clipboard.writeText(amt);
-  copyAmount.textContent = 'Copied!';
-  setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500);
-};
-
-// === PAY WITH WALLET (BNB only) ===
-payWithWallet.onclick = async () => {
-  if (!provider || !userAddress) return alert('Connect wallet');
-  if (modalCurrency.textContent !== 'BNB') return alert('Use manual send for USDT/BTCB');
-
-  const amount = invTotal.textContent.split(' ')[0];
-  const wei = web3.utils.toWei(amount, 'ether');
-
-  try {
-    const tx = await provider.request({
-      method: 'eth_sendTransaction',
-      params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }]
-    });
-    alert('Payment sent! TX: ' + tx);
-    pollForPayment(PRESALE_WALLET, amount);
-  } catch (e) {
-    alert('Payment failed: ' + e.message);
-  }
-};
-
-// === SUBMIT TX HASH ===
-submitTx.onclick = async () => {
-  const hash = txHashInput.value.trim();
-  if (!hash) return alert('Enter TX hash');
-  try {
-    const resp = await fetch(API_BASE + '/reward', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ txHash: hash, wallet: userAddress })
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      alert('Payment confirmed! Tokens issued.');
-      payModal.classList.remove('show');
-      window.location.href = '/Blue-Key-Claim';
-    } else {
-      alert('Error: ' + (data.message || 'Submit failed'));
-    }
-  } catch (e) {
-    alert('Submit failed: ' + e.message);
-  }
-};
-
-// === POLL FOR PAYMENT (BNB only) ===
-async function pollForPayment(address, amountStr) {
-  const target = parseFloat(amountStr);
-  const interval = setInterval(async () => {
-    try {
-      const bal = await web3.eth.getBalance(address);
-      const balBNB = parseFloat(web3.utils.fromWei(bal, 'ether'));
-      if (balBNB >= target) {
-        clearInterval(interval);
-        statusSmall.textContent = 'Payment detected!';
-        await fetch(API_BASE + '/reward', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wallet: userAddress, amount: amountStr, currency: 'BNB' })
-        });
-        alert('Tokens issued!');
-        payModal.classList.remove('show');
-        setTimeout(() => window.location.href = '/Blue-Key-Claim', 1000);
+    const SignClient = window.SignClient;
+    const client = await SignClient.init({
+      projectId: CONNECT_CONFIG.wcProjectId,
+      metadata: {
+        name: "TiffyAI Connector",
+        description: "WalletConnect v2 DApp Loader",
+        url: "https://tiffyai.github.io",
+        icons: ["https://tiffyai.github.io/Dream-Menu/TiffyAI-Token.png"]
       }
-    } catch (e) { console.log('Poll error:', e); }
-  }, 8000);
+    });
+
+    const requiredNamespaces = {
+      eip155: {
+        methods: ["eth_chainId", "eth_accounts", "personal_sign", "eth_sign"],
+        chains: [CONNECT_CONFIG.chainNamespaceId],
+        events: ["accountsChanged", "chainChanged"]
+      }
+    };
+
+    const { uri, approval } = await client.connect({ requiredNamespaces });
+
+    if (uri) {
+      const encoded = encodeURIComponent(uri);
+      openDeepLink(`trust://wc?uri=${encoded}`);
+      setTimeout(() => openDeepLink(uri), 800);
+    }
+
+    const session = await approval();
+    const accounts = extractAccountsFromSession(session);
+    userAddress = accounts[0];
+
+    provider = createWCv2ProviderWrapper(client, session);
+    web3 = new Web3(provider);
+
+    onConnected("WalletConnect v2 (Reown)");
+    return;
+
+  } catch (err) {
+    console.warn("WC v2 failed:", err);
+  }
+
+  /* 3) WALLETCONNECT v1 FALLBACK */
+  try {
+    if (!window.WalletConnectProvider_v1) {
+      await loadScript("https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js");
+      window.WalletConnectProvider_v1 = window.WalletConnectProvider;
+    }
+
+    const WCProvider = window.WalletConnectProvider_v1;
+    const wcProv = new WCProvider({
+      rpc: CONNECT_CONFIG.rpc,
+      chainId: CONNECT_CONFIG.chainId,
+      qrcode: true
+    });
+
+    await wcProv.enable();
+    provider = wcProv;
+    web3 = new Web3(provider);
+    const accounts = await web3.eth.getAccounts();
+    userAddress = accounts[0];
+
+    onConnected("WalletConnect v1 Fallback");
+    return;
+
+  } catch (err) {
+    console.warn("WC v1 failed:", err);
+  }
+
+  alert("No wallet detected.");
 }
 
-// === CLOSE MODAL ===
-window.onclick = (e) => {
-  if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) {
-    payModal.classList.remove('show');
-  }
-};
+/* UI UPDATES */
+function onConnected(type) {
+  addrDisplay.textContent = "Connected: " + userAddress.slice(0, 6) + "..." + userAddress.slice(-4);
+  statusSmall.textContent = type;
+  connectBtn.textContent = "Connected";
+}
 
-// === INIT ===
-currencyEl.addEventListener('change', updateAmount);
-qtyEl.addEventListener('input', updateAmount);
-fetchPrices();
-setInterval(fetchPrices, 30000);
+/* DEEP LINK HELPER */
+function openDeepLink(url) {
+  try { window.location.href = url; } catch (e) {}
+}
+
+/* LOAD SCRIPT HELPER */
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = res;
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+/* EXTRACT ACCOUNTS WC2 */
+function extractAccountsFromSession(session) {
+  const out = [];
+  const ns = session.namespaces || {};
+  for (const key of Object.keys(ns)) {
+    for (const acc of ns[key].accounts || []) {
+      out.push(acc.split(":")[2]);
+    }
+  }
+  return out;
+}
+
+/* WC2 PROVIDER WRAPPER */
+function createWCv2ProviderWrapper(client, session) {
+  const topic = session.topic;
+  return {
+    request: async ({ method, params }) => {
+      return client.request({
+        topic,
+        chainId: CONNECT_CONFIG.chainNamespaceId,
+        request: { method, params }
+      });
+    }
+  };
+}
+
+/* BUTTON */
+connectBtn.addEventListener("click", async () => {
+  connectBtn.disabled = true;
+  connectBtn.textContent = "Connecting...";
+  await connectWallet();
+  if (!userAddress) connectBtn.textContent = "Connect Wallet";
+  connectBtn.disabled = false;
+});
 </script>
+
 </body>
 </html>
