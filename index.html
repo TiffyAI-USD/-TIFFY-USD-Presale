@@ -240,7 +240,7 @@ function getBnbPerToken() {
   return (1 / bnbPrice).toFixed(8);
 }
 
-// === UPDATE DISPLAY (NO TEMPLATES!) ===
+// === UPDATE DISPLAY ===
 function updateAmount() {
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
   const cur = currencyEl.value;
