@@ -276,6 +276,42 @@ function updateAmount() {
 // === WALLET CONNECTION LOGIC ===
 // This keeps your original style but adds Trust injected detection + WCv2 + WCv1 fallback
 
+// Helper: robust Trust detection and provider extraction
+function findTrustProvider() {
+  try {
+    // 1) explicit window.trustwallet (older builds)
+    if (window.trustwallet && typeof window.trustwallet.request === 'function') {
+      return window.trustwallet;
+    }
+
+    // 2) window.ethereum flags (newer builds)
+    if (window.ethereum) {
+      const eth = window.ethereum;
+
+      // direct flags
+      if (eth.isTrustWallet === true || eth.isTrust === true || eth.isTrustWallet === 'true') {
+        return eth;
+      }
+
+      // some dapps expose array of providers (metamask + trust)
+      if (Array.isArray(eth.providers)) {
+        const p = eth.providers.find(p => p && (p.isTrustWallet === true || p.isTrust === true));
+        if (p) return p;
+      }
+
+      // older compatibility: sometimes provider has property 'isTrust'
+      if (eth.provider && (eth.provider.isTrust === true || eth.provider.isTrustWallet === true)) {
+        return eth.provider;
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.warn('findTrustProvider error', e);
+    return null;
+  }
+}
+
 async function initWeb3WithProvider(_provider) {
   try {
     provider = _provider;
@@ -307,35 +343,48 @@ async function connectWalletHandler() {
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
-  // 1) Trust Wallet internal browser (best)
+  // ---- 0) Try to detect Trust provider first (robust) ----
   try {
-    if (window.trustwallet && typeof window.trustwallet.request === 'function') {
+    const trustProv = findTrustProvider();
+    if (trustProv) {
       try {
-        await window.trustwallet.request({ method: 'eth_requestAccounts' });
-        await initWeb3WithProvider(window.trustwallet);
+        await (trustProv.request ? trustProv.request({ method: 'eth_requestAccounts' }) : trustProv.enable());
+        await initWeb3WithProvider(trustProv);
         connectBtn.disabled = false;
         return;
       } catch (e) {
-        console.warn('Trust injected provider present but eth_requestAccounts failed', e);
+        console.warn('Trust provider found but request failed', e);
+        // continue to other fallbacks
       }
     }
   } catch (e) {
     console.warn('Trust detection error', e);
   }
 
-  // If we are on mobile and trustwallet isn't injected, warn the user to open inside Trust's browser for best results
-  if (isMobile() && /Trust/i.test(navigator.userAgent) === false && !window.trustwallet) {
-    // If the user is on mobile but not inside the Trust Wallet app, we inform them.
-    // We do NOT block — user can continue to use WalletConnect fallback.
+  // If mobile and not inside Trust, gentle hint (no blocking)
+  if (isMobile() && /Trust/i.test(navigator.userAgent) === false && !findTrustProvider()) {
     console.log('Mobile device, but not inside Trust Wallet internal browser.');
-    // (optional) show a small friendly prompt
-    // alert('If you use Trust Wallet, open this page inside the Trust Wallet app browser for the smoothest experience. Otherwise, continue to WalletConnect.');
   }
 
-  // 2) Injected ethereum (MetaMask, Brave, etc.)
+  // ---- 1) Injected ethereum (MetaMask, Brave, etc.) ----
   try {
     if (window.ethereum && typeof window.ethereum.request === 'function') {
       try {
+        // If multiple providers, prefer the one that has accounts (handles webbrowsers with multiple injected providers)
+        if (Array.isArray(window.ethereum.providers)) {
+          // try to find a provider that returns accounts
+          for (const p of window.ethereum.providers) {
+            try {
+              await (p.request ? p.request({ method: 'eth_requestAccounts' }) : p.enable());
+              await initWeb3WithProvider(p);
+              connectBtn.disabled = false;
+              return;
+            } catch (_) {
+              // ignore and try next
+            }
+          }
+        }
+        // otherwise use the single injected provider
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         await initWeb3WithProvider(window.ethereum);
         connectBtn.disabled = false;
@@ -348,7 +397,7 @@ async function connectWalletHandler() {
     console.warn('Injected ethereum detection error', e);
   }
 
-  // 3) WalletConnect v2 via @walletconnect/ethereum-provider
+  // ---- 2) WalletConnect v2 via @walletconnect/ethereum-provider ----
   try {
     if (window.WalletConnectProvider && typeof window.WalletConnectProvider.init === 'function') {
       const wcProvider = await window.WalletConnectProvider.init({
@@ -365,7 +414,6 @@ async function connectWalletHandler() {
         }
       });
 
-      // enable -> opens QR / deep link
       try {
         await wcProvider.enable();
         await initWeb3WithProvider(wcProvider);
@@ -379,11 +427,10 @@ async function connectWalletHandler() {
     console.warn('WalletConnect v2 connect failed', e);
   }
 
-  // 4) Final fallback: WalletConnect v1 provider (dynamic load)
+  // ---- 3) Final fallback: WalletConnect v1 provider (dynamic load) ----
   try {
     if (!window.WalletConnectProvider_v1) {
       await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
-      // some UMD builds expose WalletConnectProvider or default
       window.WalletConnectProvider_v1 = window.WalletConnectProvider || window.WalletConnectProvider_default || window.WalletConnectProvider_v1 || null;
     }
     const WCProviderV1 = window.WalletConnectProvider_v1;
@@ -410,7 +457,7 @@ async function connectWalletHandler() {
 // helper to load a script dynamically
 function loadScript(src) {
   return new Promise((resolve, reject) => {
-    if (document.querySelector('script[src="' + src + '"]')) return resolve();
+    if (document.querySelector('script[src=\"' + src + '\"]')) return resolve();
     const s = document.createElement('script');
     s.src = src;
     s.onload = () => resolve();
@@ -475,8 +522,8 @@ buyBtn.addEventListener('click', async () => {
 
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
   const qrData = currency === 'BNB'
-    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}`
-    : `\( {PRESALE_WALLET}?amount= \){amount}`;
+    ? `ethereum:\\( {PRESALE_WALLET}@56?value= \\){amount}`
+    : `\\( {PRESALE_WALLET}?amount= \\){amount}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
 
   payAddress.textContent = PRESALE_WALLET;
