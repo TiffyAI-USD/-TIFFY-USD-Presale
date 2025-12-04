@@ -5,7 +5,8 @@
   <title>TiffyAI Presale — Checkout</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
-  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.2/dist/index.umd.min.js"></script>
+  <!-- WalletConnect v1 (works in Trust DApp Browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
   <style>
     :root {
       --accent1: #00f0ff;
@@ -186,7 +187,7 @@
 // === CONFIG ===
 const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA'; // ← YOUR WALLET
 const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
-const WC_PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576'; // ← YOUR REOWN ID
+const BSC_RPC = 'https://bsc-dataseed.binance.org/';
 
 // === STATE ===
 let userAddress = null;
@@ -264,43 +265,74 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === CONNECT WALLET (TRUST, METAMASK, WCv2) ===
+// === CONNECT WALLET (TRUST WALLET DAPP BROWSER FIXED) ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
-  // 1. Try MetaMask / Injected
-  if (window.ethereum) {
+  let connected = false;
+
+  // 1. TRUST WALLET DAPP BROWSER DETECTION
+  if (window.navigator.userAgent.includes('Trust') || document.referrer.includes('trustwallet')) {
+    try {
+      // Trust Wallet Injected Provider
+      if (window.trustwallet) {
+        await window.trustwallet.request({ method: 'eth_requestAccounts' });
+        await initWeb3(window.trustwallet);
+        connected = true;
+      } else {
+        // WalletConnect for Trust
+        const WC = window.WalletConnectProvider.default;
+        const wc = new WC({ 
+          rpc: { 56: BSC_RPC },
+          chainId: 56,
+          qrcode: true,
+          infuraId: null // No Infura for BSC
+        });
+        await wc.enable();
+        await initWeb3(wc);
+        connected = true;
+      }
+    } catch (e) {
+      console.warn('Trust failed', e);
+    }
+  }
+
+  // 2. METAMASK / INJECTED
+  else if (window.ethereum) {
     try {
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       await initWeb3(window.ethereum);
-      connectBtn.disabled = false;
-      connectBtn.textContent = 'Connected';
-      return;
-    } catch (e) { console.warn('Injected failed', e); }
+      connected = true;
+    } catch (e) {
+      console.warn('Injected failed', e);
+    }
   }
 
-  // 2. WalletConnect v2 (Trust Wallet, etc.)
-  try {
-    const wc = await window.EthereumProvider.init({
-      projectId: WC_PROJECT_ID,
-      chains: [56],
-      showQrModal: true,
-      rpcMap: { 56: 'https://bsc-dataseed.binance.org/' },
-      metadata: { name: 'TiffyAI', description: 'Presale', url: location.href, icons: [] }
-    });
-    await wc.enable();
-    await initWeb3(wc);
-    connectBtn.disabled = false;
-    connectBtn.textContent = 'Connected';
-    return;
-  } catch (e) {
-    console.warn('WCv2 failed', e);
+  // 3. WalletConnect v1 Fallback
+  else {
+    try {
+      const WC = window.WalletConnectProvider.default;
+      const wc = new WC({ 
+        rpc: { 56: BSC_RPC },
+        chainId: 56,
+        qrcode: true,
+        infuraId: null
+      });
+      await wc.enable();
+      await initWeb3(wc);
+      connected = true;
+    } catch (e) {
+      console.warn('WC failed', e);
+    }
   }
 
-  alert('No wallet found. Open in Trust Wallet or install MetaMask.');
+  if (!connected) {
+    alert('No wallet found. Open in Trust Wallet DApp Browser or install MetaMask.');
+  }
+
   connectBtn.disabled = false;
-  connectBtn.textContent = 'Connect Wallet';
+  connectBtn.textContent = connected ? 'Connected' : 'Connect Wallet';
 }
 
 async function initWeb3(_provider) {
@@ -324,7 +356,7 @@ async function ensureChain() {
       await provider.request({ method: 'wallet_addEthereumChain', params: [{
         chainId: '0x38', chainName: 'BNB Smart Chain',
         nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+        rpcUrls: [BSC_RPC],
         blockExplorerUrls: ['https://bscscan.com']
       }]});
     }
@@ -333,7 +365,7 @@ async function ensureChain() {
 
 connectBtn.addEventListener('click', connectWalletHandler);
 
-// === CREATE INVOICE (FIXED QR) ===
+// === CREATE INVOICE ===
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
 
@@ -375,7 +407,7 @@ buyBtn.addEventListener('click', async () => {
 copyAddr.onclick = () => { navigator.clipboard.writeText(PRESALE_WALLET); copyAddr.textContent = 'Copied!'; setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500); };
 copyAmount.onclick = () => { const amt = invTotal.textContent.split(' ')[0]; navigator.clipboard.writeText(amt); copyAmount.textContent = 'Copied!'; setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500); };
 
-// === PAY WITH WALLET (WORKS ON TRUST) ===
+// === PAY WITH WALLET ===
 payWithWallet.onclick = async () => {
   if (!provider || modalCurrency.textContent !== 'BNB') return alert('BNB only');
   const amount = invTotal.textContent.split(' ')[0];
