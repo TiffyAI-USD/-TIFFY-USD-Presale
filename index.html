@@ -6,51 +6,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
 
-  <!-- WALLET CONNECT v2 MODAL — ALL WALLETS — OFFICIAL -->
-  <script type="module">
-    import { Web3Modal } from 'https://unpkg.com/@web3modal/standalone@2.7.1/dist/index.js';
-
-    const PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576';
-    let web3Modal = null;
-    let provider = null;
-    let userAddress = null;
-
-    window.initWalletConnect = async () => {
-      web3Modal = new Web3Modal({
-        projectId: PROJECT_ID,
-        walletConnectVersion: 2,
-        themeMode: 'dark',
-        standaloneChains: ['eip155:56'],
-        explorerRecommendedWalletIds: [
-          'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e9721d616', // Trust
-          '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // MetaMask
-          '971e689d0a5be4f8a0d70c4b8d8f4c6f9d3a7e6f8c5d4b3a2c1d0e9f8a7b6c5d'  // OKX
-        ]
-      });
-    };
-
-    window.connectWallet = async () => {
-      try {
-        document.getElementById('connectBtn').textContent = 'Opening...';
-        const wcProvider = await web3Modal.open();
-        provider = wcProvider;
-        window.web3 = new Web3(provider);
-        const accounts = await window.web3.eth.getAccounts();
-        userAddress = accounts[0];
-        document.getElementById('addrDisplay').textContent = `Connected: \( {userAddress.slice(0,6)}... \){userAddress.slice(-4)}`;
-        document.getElementById('statusSmall').textContent = 'BNB Chain';
-        document.getElementById('connectBtn').textContent = 'Connected';
-        document.getElementById('connectBtn').disabled = true;
-        window.ensureChain();
-      } catch (e) {
-        alert('Connection failed. Try again.');
-        document.getElementById('connectBtn').textContent = 'Connect Wallet';
-      }
-    };
-
-    // Auto-init on load
-    window.addEventListener('load', initWalletConnect);
-  </script>
+  <!-- WalletConnect v2 "ethereum-provider" UMD (works with Trust Wallet + WC v2 wallets) -->
+  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.2/dist/index.umd.min.js"></script>
 
   <style>
     :root {
@@ -180,7 +137,7 @@
 
       <input id="qty" type="number" min="1" value="1" placeholder="Quantity" />
 
-      <button id="connectBtn" class="btn connect" onclick="connectWallet()">Connect Wallet</button>
+      <button id="connectBtn" class="btn connect">Connect Wallet</button>
       <button id="buyBtn" class="btn buy">Create Invoice</button>
     </div>
 
@@ -233,7 +190,13 @@
 const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA';
 const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
 
+// WalletConnect v2 project id (your Reown ID)
+const WC_PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576';
+
 // === STATE ===
+let userAddress = null;
+let provider = null;
+let web3 = null;
 let prices = { BNB: 810, USDT: 1, BTC: 95000 };
 let bnbPrice = 810;
 
@@ -271,6 +234,7 @@ async function fetchPrices() {
     bnbPrice = prices.BNB;
     updateAmount();
   } catch (e) {
+    console.warn('Using fallback prices');
     prices = { BNB: 810, BTC: 95000, USDT: 1 };
     bnbPrice = 810;
     updateAmount();
@@ -309,30 +273,188 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === ENSURE CHAIN ===
-window.ensureChain = async () => {
-  if (!window.web3 || !provider) return;
+// === WALLET CONNECTION LOGIC ===
+// This keeps your original style but adds Trust injected detection + WCv2 + WCv1 fallback
+
+async function initWeb3WithProvider(_provider) {
   try {
-    const chainId = await window.web3.eth.getChainId();
-    if (chainId !== 56) {
-      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
+    provider = _provider;
+    // Some providers expose `provider.provider` (WC v2 wrapper). Normalize:
+    if (provider && provider.provider) provider = provider.provider;
+    web3 = new Web3(provider);
+    const accounts = await web3.eth.getAccounts();
+    userAddress = accounts && accounts[0];
+    if (userAddress) {
+      addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
+      statusSmall.textContent = 'BNB Chain';
+      connectBtn.textContent = 'Connected';
+      ensureChain();
+    } else {
+      console.warn('No accounts found from provider');
+      statusSmall.textContent = 'Connected (no accounts)';
     }
   } catch (e) {
-    if (e.code === 4902) {
-      await provider.request({ method: 'wallet_addEthereumChain', params: [{
-        chainId: '0x38', chainName: 'BNB Smart Chain',
-        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-        rpcUrls: ['https://bsc-dataseed.binance.org/'],
-        blockExplorerUrls: ['https://bscscan.com']
-      }]});
-    }
+    console.error('initWeb3WithProvider error', e);
+    alert('Wallet init failed: ' + (e.message || e));
   }
-};
+}
+
+function isMobile() {
+  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+}
+
+async function connectWalletHandler() {
+  connectBtn.disabled = true;
+  connectBtn.textContent = 'Connecting...';
+
+  // 1) Trust Wallet internal browser (best)
+  try {
+    if (window.trustwallet && typeof window.trustwallet.request === 'function') {
+      try {
+        await window.trustwallet.request({ method: 'eth_requestAccounts' });
+        await initWeb3WithProvider(window.trustwallet);
+        connectBtn.disabled = false;
+        return;
+      } catch (e) {
+        console.warn('Trust injected provider present but eth_requestAccounts failed', e);
+      }
+    }
+  } catch (e) {
+    console.warn('Trust detection error', e);
+  }
+
+  // If we are on mobile and trustwallet isn't injected, warn the user to open inside Trust's browser for best results
+  if (isMobile() && /Trust/i.test(navigator.userAgent) === false && !window.trustwallet) {
+    // If the user is on mobile but not inside the Trust Wallet app, we inform them.
+    // We do NOT block — user can continue to use WalletConnect fallback.
+    console.log('Mobile device, but not inside Trust Wallet internal browser.');
+    // (optional) show a small friendly prompt
+    // alert('If you use Trust Wallet, open this page inside the Trust Wallet app browser for the smoothest experience. Otherwise, continue to WalletConnect.');
+  }
+
+  // 2) Injected ethereum (MetaMask, Brave, etc.)
+  try {
+    if (window.ethereum && typeof window.ethereum.request === 'function') {
+      try {
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        await initWeb3WithProvider(window.ethereum);
+        connectBtn.disabled = false;
+        return;
+      } catch (e) {
+        console.warn('Injected ethereum connect failed', e);
+      }
+    }
+  } catch (e) {
+    console.warn('Injected ethereum detection error', e);
+  }
+
+  // 3) WalletConnect v2 via @walletconnect/ethereum-provider
+  try {
+    if (window.WalletConnectProvider && typeof window.WalletConnectProvider.init === 'function') {
+      const wcProvider = await window.WalletConnectProvider.init({
+        projectId: WC_PROJECT_ID,
+        chains: [56],
+        showQrModal: true,
+        optionalChains: [],
+        rpcMap: { 56: 'https://bsc-dataseed.binance.org/' },
+        metadata: {
+          name: 'TiffyAI Presale',
+          description: 'Connect your wallet to TiffyAI',
+          url: 'https://tiffyai.github.io',
+          icons: ['https://tiffyai.github.io/Dream-Menu/TiffyAI-Token.png']
+        }
+      });
+
+      // enable -> opens QR / deep link
+      try {
+        await wcProvider.enable();
+        await initWeb3WithProvider(wcProvider);
+        connectBtn.disabled = false;
+        return;
+      } catch (e) {
+        console.warn('WCv2 provider enable failed', e);
+      }
+    }
+  } catch (e) {
+    console.warn('WalletConnect v2 connect failed', e);
+  }
+
+  // 4) Final fallback: WalletConnect v1 provider (dynamic load)
+  try {
+    if (!window.WalletConnectProvider_v1) {
+      await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
+      // some UMD builds expose WalletConnectProvider or default
+      window.WalletConnectProvider_v1 = window.WalletConnectProvider || window.WalletConnectProvider_default || window.WalletConnectProvider_v1 || null;
+    }
+    const WCProviderV1 = window.WalletConnectProvider_v1;
+    if (WCProviderV1) {
+      const wcProv = new WCProviderV1({
+        rpc: { 56: 'https://bsc-dataseed.binance.org/' },
+        chainId: 56,
+        qrcode: true
+      });
+      await wcProv.enable();
+      await initWeb3WithProvider(wcProv);
+      connectBtn.disabled = false;
+      return;
+    }
+  } catch (e) {
+    console.warn('WalletConnect v1 fallback failed', e);
+  }
+
+  alert('No wallet could be connected. Ensure you have a mobile wallet (Trust / MetaMask) or desktop extension installed. For Trust Wallet users, opening this page inside the Trust Wallet app browser is recommended.');
+  connectBtn.disabled = false;
+  connectBtn.textContent = 'Connect Wallet';
+}
+
+// helper to load a script dynamically
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector('script[src="' + src + '"]')) return resolve();
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = (e) => reject(new Error('Failed to load ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+connectBtn.addEventListener('click', connectWalletHandler);
+
+// === ENSURE CHAIN (keeps your old logic) ===
+async function ensureChain() {
+  if (!web3 || !provider) return;
+  try {
+    const chainId = await web3.eth.getChainId();
+    if (chainId !== 56) {
+      try {
+        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
+      } catch (e) {
+        if (e && e.code === 4902) {
+          try {
+            await provider.request({ method: 'wallet_addEthereumChain', params: [{
+              chainId: '0x38', chainName: 'BNB Smart Chain',
+              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+              rpcUrls: ['https://bsc-dataseed.binance.org/'],
+              blockExplorerUrls: ['https://bscscan.com']
+            }]});
+          } catch (inner) {
+            console.warn('wallet_addEthereumChain failed', inner);
+          }
+        } else {
+          console.warn('wallet_switchEthereumChain failed', e);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('ensureChain error', e);
+  }
+}
 
 // === CREATE INVOICE ===
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
-  if (!window.web3) return alert('Web3 not ready');
+  if (!web3) return alert('Web3 not ready');
 
   const currency = currencyEl.value;
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
@@ -391,12 +513,13 @@ payWithWallet.onclick = async () => {
   if (modalCurrency.textContent !== 'BNB') return alert('Use manual send for USDT/BTCB');
 
   const amount = invTotal.textContent.split(' ')[0];
-  const wei = window.web3.utils.toWei(amount, 'ether');
+  const wei = web3.utils.toWei(amount, 'ether');
 
   try {
+    const params = [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }];
     const tx = await provider.request({
       method: 'eth_sendTransaction',
-      params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }]
+      params
     });
     alert('Payment sent! TX: ' + tx);
     pollForPayment(PRESALE_WALLET, amount, 'BNB');
@@ -434,8 +557,8 @@ async function pollForPayment(address, amountStr, currency) {
   const target = parseFloat(amountStr);
   const interval = setInterval(async () => {
     try {
-      const bal = await window.web3.eth.getBalance(address);
-      const balBNB = parseFloat(window.web3.utils.fromWei(bal, 'ether'));
+      const bal = await web3.eth.getBalance(address);
+      const balBNB = parseFloat(web3.utils.fromWei(bal, 'ether'));
       if (balBNB >= target) {
         clearInterval(interval);
         statusSmall.textContent = 'Payment detected!';
