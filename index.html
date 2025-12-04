@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>TiffyAI Presale</title>
+  <title>TiffyAI Presale — Wallet Connect</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <script type="module">
     import { SignClient } from 'https://unpkg.com/@walletconnect/sign-client@2.13.0/dist/index.js';
@@ -13,21 +13,29 @@
       try {
         client = await SignClient.init({ projectId: PROJECT_ID });
         const { uri, approval } = await client.connect({
-          requiredNamespaces: { eip155: { methods: ['eth_sendTransaction'], chains: ['eip155:56'], events: ['accountsChanged'] } }
+          requiredNamespaces: {
+            eip155: {
+              methods: ['eth_sendTransaction', 'eth_sign'],
+              chains: ['eip155:56'], // BNB Chain
+              events: ['accountsChanged', 'chainChanged']
+            }
+          }
         });
         if (uri) WalletConnectModal.openModal({ uri });
         const session = await approval();
         const address = session.namespaces.eip155.accounts[0].split(':')[2];
         document.getElementById('status').textContent = `Connected: \( {address.slice(0,6)}... \){address.slice(-4)}`;
         WalletConnectModal.closeModal();
-      } catch (e) { alert('Failed: ' + e.message); }
+      } catch (e) {
+        alert('Failed: ' + e.message);
+      }
     };
   </script>
   <style>
-    body{margin:0;background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;padding:20px}
-    .box{max-width:400px;width:100%;text-align:center}
-    button{padding:16px 32px;font-size:18px;background:linear-gradient(135deg,#00f0ff,#ff00d4);color:#000;border:none;border-radius:16px;cursor:pointer;font-weight:800}
-    #status{margin-top:20px;font-size:16px}
+    body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; padding: 20px; }
+    .box { max-width: 400px; width: 100%; text-align: center; }
+    button { padding: 16px 32px; font-size: 18px; background: linear-gradient(135deg, #00f0ff, #ff00d4); color: #000; border: none; border-radius: 16px; cursor: pointer; font-weight: 800; }
+    #status { margin-top: 20px; font-size: 16px; }
   </style>
 </head>
 <body>
