@@ -260,24 +260,49 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === CONNECT WALLET — FINAL, NO RELOAD, NO KICKOUT ===
+// === WAIT FOR ETHEREUM — FINAL FIX ===
+function waitForEthereum() {
+  return new Promise((resolve) => {
+    if (window.ethereum) {
+      resolve(window.ethereum);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      if (window.ethereum) {
+        clearInterval(interval);
+        resolve(window.ethereum);
+      }
+    }, 100);
+
+    setTimeout(() => {
+      clearInterval(interval);
+      resolve(null);
+    }, 15000); // 15 sec max
+  });
+}
+
+// === CONNECT WALLET — FINAL, NO ALERT, NO RELOAD ===
 async function connectWalletHandler() {
-  if (!window.ethereum) {
-    alert('No wallet found. Open in Trust Wallet DApp browser.');
+  connectBtn.disabled = true;
+  connectBtn.textContent = 'Waiting for wallet...';
+
+  const ethereum = await waitForEthereum();
+
+  if (!ethereum) {
+    connectBtn.textContent = 'Connect Wallet';
+    connectBtn.disabled = false;
+    alert('No wallet detected. Open in Trust Wallet DApp browser.');
     return;
   }
 
-  connectBtn.disabled = true;
-  connectBtn.textContent = 'Connecting...';
-
   try {
-    // This triggers Trust Wallet popup inside DApp
-    await window.ethereum.request({ method: 'eth_requestAccounts' });
-    await initWeb3(window.ethereum);
+    await ethereum.request({ method: 'eth_requestAccounts' });
+    await initWeb3(ethereum);
     connectBtn.textContent = 'Connected';
   } catch (error) {
     console.error(error);
-    alert('Connection failed: ' + (error.message || 'User rejected'));
+    alert('Connection rejected.');
     connectBtn.textContent = 'Connect Wallet';
   }
 
@@ -314,10 +339,9 @@ async function ensureChain() {
 
 connectBtn.addEventListener('click', connectWalletHandler);
 
-// === REST OF CODE (INVOICE, PAY, POLL) — UNCHANGED ===
+// === REST OF CODE (UNCHANGED) ===
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
-
   const currency = currencyEl.value;
   const qty = Math.max(1, parseInt(qtyEl.value) || 1);
   const bnbPerToken = parseFloat(getBnbPerToken());
