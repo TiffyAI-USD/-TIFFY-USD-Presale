@@ -5,10 +5,8 @@
   <title>TiffyAI Presale — Checkout</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
-
-  <!-- WalletConnect v2 UMD -->
-  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.2/dist/index.umd.min.js"></script>
-
+  <!-- WalletConnect v1 (works in Trust DApp Browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
   <style>
     :root {
       --accent1: #00f0ff;
@@ -187,15 +185,15 @@
 
 <script>
 // === CONFIG ===
-const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA';
+const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA'; // ← YOUR WALLET
 const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
-const WC_PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576'; // Your Reown ID
+const BSC_RPC = 'https://bsc-dataseed.binance.org/';
 
 // === STATE ===
 let userAddress = null;
 let provider = null;
 let web3 = null;
-let prices = { BNB: 810, USDT: 1, BTC: 95000 };
+let prices = { BNB: 810, USDT: 1, BTCB: 95000 };
 let bnbPrice = 810;
 
 // === DOM ===
@@ -227,13 +225,13 @@ async function fetchPrices() {
     const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
     const data = await res.json();
     prices.BNB = data.binancecoin.usd;
-    prices.BTC = data.bitcoin.usd;
+    prices.BTCB = data.bitcoin.usd;
     prices.USDT = 1.0;
     bnbPrice = prices.BNB;
     updateAmount();
   } catch (e) {
     console.warn('Price fetch failed, using fallback');
-    prices = { BNB: 810, BTC: 95000, USDT: 1 };
+    prices = { BNB: 810, BTCB: 95000, USDT: 1 };
     bnbPrice = 810;
     updateAmount();
   }
@@ -258,70 +256,79 @@ function updateAmount() {
     fmtCrypto = totalCrypto.toFixed(2);
     pricePerToken = '1.00 USDT';
   } else {
-    totalCrypto = (qty * 1.0) / prices.BTC;
+    totalCrypto = (qty * 1.0) / prices.BTCB;
     fmtCrypto = totalCrypto.toFixed(8);
-    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
+    pricePerToken = (1/prices.BTCB).toFixed(8) + ' BTCB';
   }
 
   amountDisplay.textContent = 'Total: ' + fmtCrypto + ' ' + cur;
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === CONNECT WALLET ===
+// === CONNECT WALLET (TRUST WALLET DAPP BROWSER FIXED) ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
   let connected = false;
 
-  // 1. Trust Wallet (injected)
-  if (window.trustwallet?.request) {
+  // 1. TRUST WALLET DAPP BROWSER DETECTION
+  if (window.navigator.userAgent.includes('Trust') || document.referrer.includes('trustwallet')) {
     try {
-      await window.trustwallet.request({ method: 'eth_requestAccounts' });
-      await initWeb3(window.trustwallet);
-      connected = true;
-    } catch (e) { console.warn('Trust failed', e); }
+      // Trust Wallet Injected Provider
+      if (window.trustwallet) {
+        await window.trustwallet.request({ method: 'eth_requestAccounts' });
+        await initWeb3(window.trustwallet);
+        connected = true;
+      } else {
+        // WalletConnect for Trust
+        const WC = window.WalletConnectProvider.default;
+        const wc = new WC({ 
+          rpc: { 56: BSC_RPC },
+          chainId: 56,
+          qrcode: true,
+          infuraId: null // No Infura for BSC
+        });
+        await wc.enable();
+        await initWeb3(wc);
+        connected = true;
+      }
+    } catch (e) {
+      console.warn('Trust failed', e);
+    }
   }
 
-  // 2. MetaMask / Injected
-  else if (window.ethereum?.request) {
+  // 2. METAMASK / INJECTED
+  else if (window.ethereum) {
     try {
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       await initWeb3(window.ethereum);
       connected = true;
-    } catch (e) { console.warn('Injected failed', e); }
+    } catch (e) {
+      console.warn('Injected failed', e);
+    }
   }
 
-  // 3. WalletConnect v2
-  else if (window.EthereumProvider) {
+  // 3. WalletConnect v1 Fallback
+  else {
     try {
-      const wc = await window.EthereumProvider.init({
-        projectId: WC_PROJECT_ID,
-        chains: [56],
-        showQrModal: true,
-        rpcMap: { 56: 'https://bsc-dataseed.binance.org/' },
-        metadata: { name: 'TiffyAI', description: 'Presale', url: location.href, icons: [] }
+      const WC = window.WalletConnectProvider.default;
+      const wc = new WC({ 
+        rpc: { 56: BSC_RPC },
+        chainId: 56,
+        qrcode: true,
+        infuraId: null
       });
       await wc.enable();
       await initWeb3(wc);
       connected = true;
-    } catch (e) { console.warn('WCv2 failed', e); }
-  }
-
-  // 4. WalletConnect v1 fallback
-  else {
-    try {
-      await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
-      const WC = window.WalletConnectProvider;
-      const wc = new WC({ rpc: { 56: 'https://bsc-dataseed.binance.org/' }, chainId: 56, qrcode: true });
-      await wc.enable();
-      await initWeb3(wc);
-      connected = true;
-    } catch (e) { console.warn('WCv1 failed', e); }
+    } catch (e) {
+      console.warn('WC failed', e);
+    }
   }
 
   if (!connected) {
-    alert('No wallet found. Open in Trust Wallet or install MetaMask.');
+    alert('No wallet found. Open in Trust Wallet DApp Browser or install MetaMask.');
   }
 
   connectBtn.disabled = false;
@@ -335,19 +342,7 @@ async function initWeb3(_provider) {
   userAddress = accounts[0];
   addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
   statusSmall.textContent = 'BNB Chain';
-  connectBtn.textContent = 'Connected';
-  ensureChain();
-}
-
-function loadScript(src) {
-  return new Promise((res, rej) => {
-    if (document.querySelector(`script[src="${src}"]`)) return res();
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = res;
-    s.onerror = rej;
-    document.head.appendChild(s);
-  });
+  await ensureChain();
 }
 
 async function ensureChain() {
@@ -361,7 +356,7 @@ async function ensureChain() {
       await provider.request({ method: 'wallet_addEthereumChain', params: [{
         chainId: '0x38', chainName: 'BNB Smart Chain',
         nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+        rpcUrls: [BSC_RPC],
         blockExplorerUrls: ['https://bscscan.com']
       }]});
     }
@@ -370,7 +365,7 @@ async function ensureChain() {
 
 connectBtn.addEventListener('click', connectWalletHandler);
 
-// === CREATE INVOICE (FIXED QR) ===
+// === CREATE INVOICE ===
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
 
@@ -386,13 +381,13 @@ buyBtn.addEventListener('click', async () => {
     amount = (qty * 1.0).toFixed(2);
     pricePerToken = '1.00 USDT';
   } else {
-    amount = ((qty * 1.0) / prices.BTC).toFixed(8);
-    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
+    amount = ((qty * 1.0) / prices.BTCB).toFixed(8);
+    pricePerToken = (1/prices.BTCB).toFixed(8) + ' BTCB';
   }
 
-  // FIXED QR CODE
+  // FIXED QR CODE (NO \(
   const qrData = currency === 'BNB'
-    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}`
+    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}e18`
     : `\( {PRESALE_WALLET}?amount= \){amount}&token=${currency}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
 
@@ -418,7 +413,10 @@ payWithWallet.onclick = async () => {
   const amount = invTotal.textContent.split(' ')[0];
   const wei = web3.utils.toWei(amount, 'ether');
   try {
-    const tx = await provider.request({ method: 'eth_sendTransaction', params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }] });
+    const tx = await provider.request({
+      method: 'eth_sendTransaction',
+      params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + BigInt(wei).toString(16) }]
+    });
     alert('Sent! TX: ' + tx);
     pollForPayment(PRESALE_WALLET, amount);
   } catch (e) { alert('Failed: ' + e.message); }
@@ -437,15 +435,17 @@ submitTx.onclick = async () => {
 async function pollForPayment(addr, amt) {
   const target = parseFloat(amt);
   const int = setInterval(async () => {
-    const bal = await web3.eth.getBalance(addr);
-    if (parseFloat(web3.utils.fromWei(bal, 'ether')) >= target) {
-      clearInterval(int);
-      statusSmall.textContent = 'Paid!';
-      await fetch(API_BASE + '/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet: userAddress, amount: amt, currency: 'BNB' }) });
-      alert('Tokens issued!');
-      payModal.classList.remove('show');
-      setTimeout(() => location.href = '/Blue-Key-Claim', 1000);
-    }
+    try {
+      const bal = await web3.eth.getBalance(addr);
+      if (parseFloat(web3.utils.fromWei(bal, 'ether')) >= target) {
+        clearInterval(int);
+        statusSmall.textContent = 'Paid!';
+        await fetch(API_BASE + '/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet: userAddress, amount: amt, currency: 'BNB' }) });
+        alert('Tokens issued!');
+        payModal.classList.remove('show');
+        setTimeout(() => location.href = '/Blue-Key-Claim', 1000);
+      }
+    } catch (e) { console.log('Poll error', e); }
   }, 8000);
 }
 
