@@ -160,7 +160,7 @@
         <span>Price per token</span>
         <span id="invPrice">—</span>
       </div>
-      <div class="invoice-line">
+      <div class class="invoice-line">
         <span>Total Due</span>
         <span id="invTotal">—</span>
       </div>
@@ -260,47 +260,50 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === CONNECT WALLET — FIXED FOR TRUST WALLET DAPP ===
+// === WAIT FOR ETHEREUM (TRUST WALLET DAPP FIX) ===
+function waitForEthereum() {
+  return new Promise((resolve) => {
+    if (window.ethereum) {
+      resolve(window.ethereum);
+    } else {
+      const interval = setInterval(() => {
+        if (window.ethereum) {
+          clearInterval(interval);
+          resolve(window.ethereum);
+        }
+      }, 100);
+      setTimeout(() => {
+        clearInterval(interval);
+        resolve(null);
+      }, 10000); // 10 sec timeout
+    }
+  });
+}
+
+// === CONNECT WALLET ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
-  let connected = false;
-
-  // 1. INJECTED PROVIDER (Trust Wallet DApp, MetaMask, etc.)
-  if (window.ethereum) {
-    try {
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      await initWeb3(window.ethereum);
-      connected = true;
-    } catch (e) {
-      console.warn('Injected provider failed', e);
-    }
-  }
-
-  // 2. ONLY FALLBACK TO WALLETCONNECT IF NO INJECTED
-  if (!connected) {
-    try {
-      const { default: WalletConnectProvider } = await import('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
-      const wc = new WalletConnectProvider({
-        rpc: { 56: BSC_RPC },
-        chainId: 56,
-        qrcode: true
-      });
-      await wc.enable();
-      await initWeb3(wc);
-      connected = true;
-    } catch (e) {
-      console.warn('WalletConnect failed', e);
-    }
-  }
-
-  if (!connected) {
+  // 1. WAIT FOR ETHEREUM TO BE INJECTED
+  const ethereum = await waitForEthereum();
+  if (!ethereum) {
     alert('No wallet detected. Open in Trust Wallet DApp browser.');
+    connectBtn.disabled = false;
+    connectBtn.textContent = 'Connect Wallet';
+    return;
+  }
+
+  try {
+    await ethereum.request({ method: 'eth_requestAccounts' });
+    await initWeb3(ethereum);
+    connectBtn.textContent = 'Connected';
+  } catch (e) {
+    alert('Connection failed: ' + e.message);
+    connectBtn.textContent = 'Connect Wallet';
   }
 
   connectBtn.disabled = false;
-  connectBtn.textContent = connected ? 'Connected' : 'Connect Wallet';
 }
 
 async function initWeb3(_provider) {
@@ -310,7 +313,6 @@ async function initWeb3(_provider) {
   userAddress = accounts[0];
   addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
   statusSmall.textContent = 'BNB Chain';
-  connectBtn.textContent = 'Connected';
   await ensureChain();
 }
 
@@ -334,7 +336,7 @@ async function ensureChain() {
 
 connectBtn.addEventListener('click', connectWalletHandler);
 
-// === CREATE INVOICE (FIXED QR) ===
+// === CREATE INVOICE ===
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
 
