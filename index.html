@@ -4,80 +4,466 @@
   <meta charset="utf-8" />
   <title>TiffyAI Presale — Checkout</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <script src="https://cdn.jsdelivr.net/npm/web3@4.3.0/dist/web3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
 
-  <!-- OFFICIAL WALLET CONNECT v2 MODAL (ALL WALLETS) -->
+  <!-- WALLET CONNECT v2 MODAL — ALL WALLETS — OFFICIAL -->
   <script type="module">
     import { Web3Modal } from 'https://unpkg.com/@web3modal/standalone@2.7.1/dist/index.js';
 
-    const PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576'; // YOUR REOWN ID
-
-    const web3Modal = new Web3Modal({
-      projectId: PROJECT_ID,
-      walletConnectVersion: 2,
-      themeMode: 'dark',
-      explorerRecommendedWalletIds: [
-        'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e9721d616', // Trust Wallet
-        '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // MetaMask
-        '971e689d0a5be4f8a0d70c4b8d8f4c6f9d3a7e6f8c5d4b3a2c1d0e9f8a7b6c5d'  // OKX
-      ]
-    });
-
+    const PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576';
+    let web3Modal = null;
     let provider = null;
     let userAddress = null;
 
-    document.getElementById('connectBtn').onclick = async () => {
+    window.initWalletConnect = async () => {
+      web3Modal = new Web3Modal({
+        projectId: PROJECT_ID,
+        walletConnectVersion: 2,
+        themeMode: 'dark',
+        standaloneChains: ['eip155:56'],
+        explorerRecommendedWalletIds: [
+          'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e9721d616', // Trust
+          '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // MetaMask
+          '971e689d0a5be4f8a0d70c4b8d8f4c6f9d3a7e6f8c5d4b3a2c1d0e9f8a7b6c5d'  // OKX
+        ]
+      });
+    };
+
+    window.connectWallet = async () => {
       try {
         document.getElementById('connectBtn').textContent = 'Opening...';
         const wcProvider = await web3Modal.open();
         provider = wcProvider;
-        const web3 = new Web3(provider);
-        const accounts = await web3.eth.getAccounts();
+        window.web3 = new Web3(provider);
+        const accounts = await window.web3.eth.getAccounts();
         userAddress = accounts[0];
         document.getElementById('addrDisplay').textContent = `Connected: \( {userAddress.slice(0,6)}... \){userAddress.slice(-4)}`;
+        document.getElementById('statusSmall').textContent = 'BNB Chain';
         document.getElementById('connectBtn').textContent = 'Connected';
+        document.getElementById('connectBtn').disabled = true;
+        window.ensureChain();
       } catch (e) {
         alert('Connection failed. Try again.');
         document.getElementById('connectBtn').textContent = 'Connect Wallet';
       }
     };
+
+    // Auto-init on load
+    window.addEventListener('load', initWalletConnect);
   </script>
 
   <style>
-    :root { --accent1: #00f0ff; --accent2: #ff00d4; }
-    body { margin:0; font-family:system-ui,sans-serif; background:#000 url('Presale1.jpg') center/cover; color:#fff; display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
-    .wrap { max-width:800px; width:100%; background:rgba(0,0,0,0.4); border-radius:16px; padding:24px; backdrop-filter:blur(6px); border:1px solid rgba(255,255,255,0.1); }
-    .logo { width:60px; height:60px; background:linear-gradient(135deg,var(--accent1),var(--accent2)); border-radius:12px; display:flex; align-items:center; justify-content:center; font-weight:800; color:#000; }
-    .btn { padding:12px 20px; border:none; border-radius:12px; font-weight:700; cursor:pointer; }
-    .connect { background:rgba(255,255,255,0.1); color:#fff; }
-    .buy { background:linear-gradient(135deg,var(--accent1),var(--accent2)); color:#000; }
+    :root {
+      --accent1: #00f0ff;
+      --accent2: #ff00d4;
+      --glass: rgba(255,255,255,0.06);
+      --glass-border: rgba(255,255,255,0.12);
+      --muted: rgba(255,255,255,0.85);
+      --text: #e8fbff;
+    }
+    body {
+      margin: 0;
+      font-family: Inter, Poppins, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      background: url('Presale1.jpg') center/cover fixed no-repeat;
+      color: white;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      padding:18px;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 820px;
+      border-radius: 16px;
+      padding: 22px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.18));
+      border: 1px solid rgba(255,255,255,0.04);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+    }
+    .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .brand { display:flex; align-items:center; gap:12px; }
+    .logo { width:64px;height:64px;border-radius:12px;background:linear-gradient(135deg,var(--accent1),var(--accent2)); display:flex;align-items:center;justify-content:center;font-weight:800; font-size:20px; color:#001; }
+    h1 { margin:0; font-size:20px; }
+    p.lead { margin:4px 0 0 0; opacity:0.95; font-size:13px; }
+
+    .controls { display:flex; gap:12px; margin-top:18px; flex-wrap:wrap; align-items:center; justify-content:center; }
+    select, input[type="number"] {
+      padding:12px; border-radius:10px; border:none; background: rgba(255,255,255,0.04); color:var(--muted); font-size:16px; min-width:170px;
+    }
+    .btn {
+      padding:12px 18px; border-radius:12px; border:none; cursor:pointer; font-weight:700; font-size:16px;
+    }
+    .connect { background: rgba(255,255,255,0.06); color: #fff; }
+    .buy { background: linear-gradient(135deg,var(--accent1),var(--accent2)); color: #062; }
+
+    #amountDisplay { margin-top:14px; text-align:center; font-weight:800; color:var(--accent1); font-size:18px; }
+    #usdDisplay { margin-top:4px; text-align:center; opacity:0.8; font-size:14px; }
+
+    .modal {
+      position: fixed; left:50%; top:50%; transform: translate(-50%, -50%);
+      width: 96%; max-width:520px; border-radius:14px; padding:20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border: 1px solid var(--glass-border); backdrop-filter: blur(10px); box-shadow: 0 30px 80px rgba(0,0,0,0.7);
+      z-index:1000; display:none; color: white;
+    }
+    .modal.show { display:block; }
+
+    .invoice-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+      font-size: 18px; font-weight: 800;
+    }
+    .invoice-header .currency { font-weight: 600; opacity: 0.9; }
+
+    .invoice-line {
+      display: flex; justify-content: space-between; padding: 8px 0; font-size: 15px; border-bottom: 1px dashed rgba(255,255,255,0.15);
+    }
+    .invoice-line:last-child { border-bottom: none; font-weight: 700; color: var(--accent1); }
+
+    .addr {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+      font-size: 16px; padding: 14px; background: rgba(0,0,0,0.3); border-radius: 12px;
+      word-break: break-all; color: var(--text); margin: 16px 0;
+      text-align: center;
+    }
+
+    .qr { width:140px; height:140px; margin: 16px auto; border-radius:12px; overflow:hidden; background:white; padding:8px; }
+    .qr img { width:100%; height:100%; }
+
+    .glow {
+      background: linear-gradient(135deg, #00f0ff, #ff00d4);
+      color: #001; font-weight: 800; padding: 14px 20px; border-radius: 16px; border: none;
+      box-shadow: 0 0 20px rgba(0,240,255,0.6), 0 0 40px rgba(255,0,212,0.4), 0 8px 16px rgba(0,0,0,0.3);
+      transition: all 0.3s ease; font-size: 16px; min-width: 200px; text-transform: uppercase; letter-spacing: 1px;
+    }
+    .glow:hover { transform: translateY(-3px); box-shadow: 0 0 30px rgba(0,240,255,0.8), 0 0 60px rgba(255,0,212,0.6); }
+
+    .actions { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .actions button { width: 100%; }
+
+    .muted { color: rgba(255,255,255,0.75); font-size:13px; margin-top:8px; text-align:center; }
+
+    @media (max-width:520px) {
+      .logo{ width:56px;height:56px; }
+      .addr { font-size:18px; padding:16px; }
+      .qr { width:120px;height:120px; }
+      .modal { padding:16px; }
+      .btn { font-size:15px; padding:11px 13px; }
+    }
   </style>
 </head>
 <body>
 
-<div class="wrap">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <div style="display:flex; align-items:center; gap:12px;">
-      <div class="logo">TI</div>
-      <div>
-        <h1 style="margin:0; font-size:20px;">TiffyAI Presale</h1>
-        <p style="margin:4px 0 0; font-size:13px;">1 TIFFY = $1.00 USD</p>
+  <div class="wrap">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">TI</div>
+        <div>
+          <h1>TiffyAI — Presale Checkout</h1>
+          <p class="lead">1 TIFFY = $1.00 USD (live BNB rate)</p>
+        </div>
+      </div>
+      <div id="userMeta" style="text-align:right;">
+        <div id="addrDisplay">Not connected</div>
+        <div id="statusSmall" style="font-size:12px; opacity:0.85;">Ready</div>
       </div>
     </div>
-    <div id="addrDisplay" style="text-align:right; font-size:14px;">Not connected</div>
+
+    <div class="controls">
+      <select id="currency">
+        <option value="BNB">BNB (native)</option>
+        <option value="USDT">USDT (BEP-20)</option>
+        <option value="BTCB">BTCB (BEP-20)</option>
+      </select>
+
+      <input id="qty" type="number" min="1" value="1" placeholder="Quantity" />
+
+      <button id="connectBtn" class="btn connect" onclick="connectWallet()">Connect Wallet</button>
+      <button id="buyBtn" class="btn buy">Create Invoice</button>
+    </div>
+
+    <div id="amountDisplay">Loading price...</div>
+    <div id="usdDisplay">≈ $1.00 USD per token</div>
+    <div class="muted">Tokens issued instantly after payment.</div>
   </div>
 
-  <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
-    <select id="currency" style="padding:12px; border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; border:none;">
-      <option>BNB</option><option>USDT</option><option>BTCB</option>
-    </select>
-    <input id="qty" type="number" min="1" value="1" style="padding:12px; border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; border:none; width:100px;" />
-    <button id="connectBtn" class="btn connect">Connect Wallet</button>
-    <button id="buyBtn" class="btn buy">Buy</button>
+  <!-- INVOICE MODAL -->
+  <div id="payModal" class="modal" role="dialog">
+    <div class="invoice-header">
+      <div>Payment Invoice</div>
+      <div class="currency" id="modalCurrency">BNB</div>
+    </div>
+
+    <div class="addr" id="payAddress">—</div>
+
+    <div id="invoiceLines">
+      <div class="invoice-line">
+        <span>Quantity</span>
+        <span id="invQty">—</span>
+      </div>
+      <div class="invoice-line">
+        <span>Price per token</span>
+        <span id="invPrice">—</span>
+      </div>
+      <div class="invoice-line">
+        <span>Total Due</span>
+        <span id="invTotal">—</span>
+      </div>
+    </div>
+
+    <div style="margin:16px 0; text-align:center; font-size:13px; opacity:0.8;">
+      Expires: <span id="modalExpires">—</span>
+    </div>
+
+    <div class="qr" id="qrPlaceholder"><div style="color:#666; font-size:12px;">QR</div></div>
+
+    <div class="actions">
+      <button class="glow" id="copyAddr">Copy Wallet Address</button>
+      <button class="glow" id="copyAmount">Copy Amount</button>
+      <button id="payWithWallet" class="btn buy">Pay with Wallet</button>
+      <button id="submitTx" class="btn connect">Submit TX Hash</button>
+      <input id="txHashInput" placeholder="Paste transaction hash (optional)" style="margin-top:8px; padding:10px; border-radius:10px; border:none; background:rgba(255,255,255,0.03); width:100%; color:white; font-size:14px;" />
+    </div>
   </div>
 
-  <div id="amountDisplay" style="margin-top:16px; text-align:center; font-weight:800; color:var(--accent1);">Loading...</div>
-</div>
+<script>
+// === CONFIG ===
+const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA';
+const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
 
+// === STATE ===
+let prices = { BNB: 810, USDT: 1, BTC: 95000 };
+let bnbPrice = 810;
+
+// === DOM ===
+const connectBtn = document.getElementById('connectBtn');
+const buyBtn = document.getElementById('buyBtn');
+const currencyEl = document.getElementById('currency');
+const qtyEl = document.getElementById('qty');
+const amountDisplay = document.getElementById('amountDisplay');
+const usdDisplay = document.getElementById('usdDisplay');
+const addrDisplay = document.getElementById('addrDisplay');
+const statusSmall = document.getElementById('statusSmall');
+const payModal = document.getElementById('payModal');
+const payAddress = document.getElementById('payAddress');
+const modalCurrency = document.getElementById('modalCurrency');
+const modalExpires = document.getElementById('modalExpires');
+const invQty = document.getElementById('invQty');
+const invPrice = document.getElementById('invPrice');
+const invTotal = document.getElementById('invTotal');
+const qrPlaceholder = document.getElementById('qrPlaceholder');
+const copyAddr = document.getElementById('copyAddr');
+const copyAmount = document.getElementById('copyAmount');
+const payWithWallet = document.getElementById('payWithWallet');
+const submitTx = document.getElementById('submitTx');
+const txHashInput = document.getElementById('txHashInput');
+
+// === FETCH LIVE PRICES ===
+async function fetchPrices() {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,bitcoin,tether&vs_currencies=usd');
+    const data = await res.json();
+    prices.BNB = data.binancecoin.usd;
+    prices.BTC = data.bitcoin.usd;
+    prices.USDT = 1.0;
+    bnbPrice = prices.BNB;
+    updateAmount();
+  } catch (e) {
+    prices = { BNB: 810, BTC: 95000, USDT: 1 };
+    bnbPrice = 810;
+    updateAmount();
+  }
+}
+
+// === CALCULATE BNB PER $1 TOKEN ===
+function getBnbPerToken() {
+  return (1 / bnbPrice).toFixed(8);
+}
+
+// === UPDATE DISPLAY ===
+function updateAmount() {
+  const qty = Math.max(1, parseInt(qtyEl.value) || 1);
+  const cur = currencyEl.value;
+  const bnbPerToken = parseFloat(getBnbPerToken());
+  let totalCrypto = 0;
+  let fmtCrypto = '';
+  let pricePerToken = '';
+
+  if (cur === 'BNB') {
+    totalCrypto = qty * bnbPerToken;
+    fmtCrypto = totalCrypto.toFixed(6);
+    pricePerToken = bnbPerToken + ' BNB';
+  } else if (cur === 'USDT') {
+    totalCrypto = qty * 1.0;
+    fmtCrypto = totalCrypto.toFixed(2);
+    pricePerToken = '1.00 USDT';
+  } else if (cur === 'BTCB') {
+    totalCrypto = (qty * 1.0) / prices.BTC;
+    fmtCrypto = totalCrypto.toFixed(8);
+    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
+  }
+
+  amountDisplay.textContent = 'Total: ' + fmtCrypto + ' ' + cur;
+  usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
+}
+
+// === ENSURE CHAIN ===
+window.ensureChain = async () => {
+  if (!window.web3 || !provider) return;
+  try {
+    const chainId = await window.web3.eth.getChainId();
+    if (chainId !== 56) {
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
+    }
+  } catch (e) {
+    if (e.code === 4902) {
+      await provider.request({ method: 'wallet_addEthereumChain', params: [{
+        chainId: '0x38', chainName: 'BNB Smart Chain',
+        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+        blockExplorerUrls: ['https://bscscan.com']
+      }]});
+    }
+  }
+};
+
+// === CREATE INVOICE ===
+buyBtn.addEventListener('click', async () => {
+  if (!userAddress) return alert('Connect wallet first');
+  if (!window.web3) return alert('Web3 not ready');
+
+  const currency = currencyEl.value;
+  const qty = Math.max(1, parseInt(qtyEl.value) || 1);
+  const bnbPerToken = parseFloat(getBnbPerToken());
+  let amount = 0;
+  let pricePerToken = '';
+
+  if (currency === 'BNB') {
+    amount = (qty * bnbPerToken).toFixed(6);
+    pricePerToken = bnbPerToken + ' BNB';
+  } else if (currency === 'USDT') {
+    amount = (qty * 1.0).toFixed(2);
+    pricePerToken = '1.00 USDT';
+  } else if (currency === 'BTCB') {
+    amount = ((qty * 1.0) / prices.BTC).toFixed(8);
+    pricePerToken = (1/prices.BTC).toFixed(8) + ' BTCB';
+  }
+
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  const qrData = currency === 'BNB'
+    ? `ethereum:\( {PRESALE_WALLET}@56?value= \){amount}`
+    : `\( {PRESALE_WALLET}?amount= \){amount}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+
+  payAddress.textContent = PRESALE_WALLET;
+  modalCurrency.textContent = currency;
+  invQty.textContent = qty + ' TIFFY';
+  invPrice.textContent = pricePerToken;
+  invTotal.textContent = amount + ' ' + currency;
+  modalExpires.textContent = expiresAt.toLocaleString();
+  qrPlaceholder.innerHTML = `<img src="${qrUrl}" alt="Scan to Pay">`;
+
+  payModal.classList.add('show');
+  statusSmall.textContent = 'Invoice ready';
+
+  pollForPayment(PRESALE_WALLET, amount, currency);
+});
+
+// === COPY BUTTONS ===
+copyAddr.onclick = () => {
+  navigator.clipboard.writeText(PRESALE_WALLET);
+  copyAddr.textContent = 'Copied!';
+  setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500);
+};
+
+copyAmount.onclick = () => {
+  const amt = invTotal.textContent.split(' ')[0];
+  navigator.clipboard.writeText(amt);
+  copyAmount.textContent = 'Copied!';
+  setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500);
+};
+
+// === PAY WITH WALLET (BNB only) ===
+payWithWallet.onclick = async () => {
+  if (!provider || !userAddress) return alert('Connect wallet');
+  if (modalCurrency.textContent !== 'BNB') return alert('Use manual send for USDT/BTCB');
+
+  const amount = invTotal.textContent.split(' ')[0];
+  const wei = window.web3.utils.toWei(amount, 'ether');
+
+  try {
+    const tx = await provider.request({
+      method: 'eth_sendTransaction',
+      params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }]
+    });
+    alert('Payment sent! TX: ' + tx);
+    pollForPayment(PRESALE_WALLET, amount, 'BNB');
+  } catch (e) {
+    alert('Payment failed: ' + (e.message || e));
+  }
+};
+
+// === SUBMIT TX HASH ===
+submitTx.onclick = async () => {
+  const hash = txHashInput.value.trim();
+  if (!hash) return alert('Enter TX hash');
+  try {
+    const resp = await fetch(API_BASE + '/reward', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txHash: hash, wallet: userAddress })
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      alert('Payment confirmed! Tokens issued.');
+      payModal.classList.remove('show');
+      window.location.href = '/Blue-Key-Claim';
+    } else {
+      alert('Error: ' + (data.message || 'Submit failed'));
+    }
+  } catch (e) {
+    alert('Submit failed: ' + e.message);
+  }
+};
+
+// === POLL FOR PAYMENT (BNB only) ===
+async function pollForPayment(address, amountStr, currency) {
+  if (currency !== 'BNB') return;
+  const target = parseFloat(amountStr);
+  const interval = setInterval(async () => {
+    try {
+      const bal = await window.web3.eth.getBalance(address);
+      const balBNB = parseFloat(window.web3.utils.fromWei(bal, 'ether'));
+      if (balBNB >= target) {
+        clearInterval(interval);
+        statusSmall.textContent = 'Payment detected!';
+        await fetch(API_BASE + '/reward', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallet: userAddress, amount: amountStr, currency })
+        });
+        alert('Tokens issued!');
+        payModal.classList.remove('show');
+        setTimeout(() => window.location.href = '/Blue-Key-Claim', 1000);
+      }
+    } catch (e) { console.log('Poll error:', e); }
+  }, 8000);
+}
+
+// === CLOSE MODAL ===
+window.onclick = (e) => {
+  if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) {
+    payModal.classList.remove('show');
+  }
+};
+
+// === INIT ===
+currencyEl.addEventListener('change', updateAmount);
+qtyEl.addEventListener('input', updateAmount);
+fetchPrices();
+setInterval(fetchPrices, 30000);
+</script>
 </body>
 </html>
