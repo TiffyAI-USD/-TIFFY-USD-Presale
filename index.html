@@ -260,38 +260,28 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === CONNECT WALLET — FINAL TRUST WALLET FIX (NO KICKOUT, NO ALERT) ===
+// === CONNECT WALLET — FINAL, NO RELOAD, NO KICKOUT ===
 async function connectWalletHandler() {
+  if (!window.ethereum) {
+    alert('No wallet found. Open in Trust Wallet DApp browser.');
+    return;
+  }
+
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
   try {
-    // 1. TRY window.trust (Trust Wallet internal)
-    if (window.trust) {
-      await window.trust.request({ method: 'eth_requestAccounts' });
-      await initWeb3(window.trust);
-      connectBtn.textContent = 'Connected';
-      connectBtn.disabled = false;
-      return;
-    }
-
-    // 2. TRY window.ethereum with isTrust flag
-    if (window.ethereum && window.ethereum.isTrust) {
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      await initWeb3(window.ethereum);
-      connectBtn.textContent = 'Connected';
-      connectBtn.disabled = false;
-      return;
-    }
-
-    // 3. LAST RESORT: DEEP LINK TO TRUST DAPP
-    const url = encodeURIComponent(location.href);
-    window.location = `trust://open_url?url=${url}`;
-  } catch (e) {
-    alert('Connect failed. Restart Trust Wallet and try again.');
+    // This triggers Trust Wallet popup inside DApp
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    await initWeb3(window.ethereum);
+    connectBtn.textContent = 'Connected';
+  } catch (error) {
+    console.error(error);
+    alert('Connection failed: ' + (error.message || 'User rejected'));
     connectBtn.textContent = 'Connect Wallet';
-    connectBtn.disabled = false;
   }
+
+  connectBtn.disabled = false;
 }
 
 async function initWeb3(_provider) {
@@ -324,7 +314,7 @@ async function ensureChain() {
 
 connectBtn.addEventListener('click', connectWalletHandler);
 
-// === CREATE INVOICE ===
+// === REST OF CODE (INVOICE, PAY, POLL) — UNCHANGED ===
 buyBtn.addEventListener('click', async () => {
   if (!userAddress) return alert('Connect wallet first');
 
@@ -361,48 +351,28 @@ buyBtn.addEventListener('click', async () => {
   if (currency === 'BNB') pollForPayment(PRESALE_WALLET, amount);
 });
 
-// === COPY BUTTONS ===
-copyAddr.onclick = () => { 
-  navigator.clipboard.writeText(PRESALE_WALLET); 
-  copyAddr.textContent = 'Copied!'; 
-  setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500); 
-};
-copyAmount.onclick = () => { 
-  const amt = invTotal.textContent.split(' ')[0]; 
-  navigator.clipboard.writeText(amt); 
-  copyAmount.textContent = 'Copied!'; 
-  setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500); 
-};
+copyAddr.onclick = () => { navigator.clipboard.writeText(PRESALE_WALLET); copyAddr.textContent = 'Copied!'; setTimeout(() => copyAddr.textContent = 'Copy Wallet Address', 1500); };
+copyAmount.onclick = () => { const amt = invTotal.textContent.split(' ')[0]; navigator.clipboard.writeText(amt); copyAmount.textContent = 'Copied!'; setTimeout(() => copyAmount.textContent = 'Copy Amount', 1500); };
 
-// === PAY WITH WALLET ===
 payWithWallet.onclick = async () => {
   if (!provider || modalCurrency.textContent !== 'BNB') return alert('BNB only');
   const amount = invTotal.textContent.split(' ')[0];
   const wei = web3.utils.toWei(amount, 'ether');
   try {
-    const tx = await provider.request({ 
-      method: 'eth_sendTransaction', 
-      params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }] 
-    });
+    const tx = await provider.request({ method: 'eth_sendTransaction', params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }] });
     alert('Sent! TX: ' + tx);
     pollForPayment(PRESALE_WALLET, amount);
   } catch (e) { alert('Failed: ' + e.message); }
 };
 
-// === SUBMIT TX ===
 submitTx.onclick = async () => {
   const hash = txHashInput.value.trim();
   if (!hash) return alert('Enter hash');
-  const resp = await fetch(API_BASE + '/reward', { 
-    method: 'POST', 
-    headers: { 'Content-Type': 'application/json' }, 
-    body: JSON.stringify({ txHash: hash, wallet: userAddress }) 
-  });
+  const resp = await fetch(API_BASE + '/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ txHash: hash, wallet: userAddress }) });
   const data = await resp.json();
   resp.ok ? (alert('Confirmed!'), payModal.classList.remove('show'), location.href = '/Blue-Key-Claim') : alert('Error: ' + (data.message || 'Failed'));
 };
 
-// === POLL PAYMENT ===
 async function pollForPayment(addr, amt) {
   const target = parseFloat(amt);
   const int = setInterval(async () => {
@@ -411,11 +381,7 @@ async function pollForPayment(addr, amt) {
       if (parseFloat(web3.utils.fromWei(bal, 'ether')) >= target) {
         clearInterval(int);
         statusSmall.textContent = 'Paid!';
-        await fetch(API_BASE + '/reward', { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ wallet: userAddress, amount: amt, currency: 'BNB' }) 
-        });
+        await fetch(API_BASE + '/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet: userAddress, amount: amt, currency: 'BNB' }) });
         alert('Tokens issued!');
         payModal.classList.remove('show');
         setTimeout(() => location.href = '/Blue-Key-Claim', 1000);
@@ -424,11 +390,7 @@ async function pollForPayment(addr, amt) {
   }, 8000);
 }
 
-// === CLOSE MODAL ===
-window.onclick = e => { 
-  if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) 
-    payModal.classList.remove('show'); 
-};
+window.onclick = e => { if (payModal.classList.contains('show') && !payModal.contains(e.target) && e.target !== buyBtn) payModal.classList.remove('show'); };
 
 // === INIT ===
 currencyEl.addEventListener('change', updateAmount);
