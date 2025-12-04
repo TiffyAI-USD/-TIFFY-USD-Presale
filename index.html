@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
 
-  <!-- WalletConnect v2 "ethereum-provider" UMD (works with Trust Wallet + WC v2 wallets) -->
+  <!-- WalletConnect v2 "ethereum-provider" UMD -->
   <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.2/dist/index.umd.min.js"></script>
 
   <style>
@@ -189,7 +189,7 @@
 // === CONFIG ===
 const PRESALE_WALLET = '0xed9b43bED20B063ae0966C0AEC446bc755fB84bA';
 const API_BASE = 'https://tiffyai-wh-wa.onrender.com';
-const WC_PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576'; // Your Reown ID
+const WC_PROJECT_ID = 'bf40c7dcdb05f06f2769573103007576';
 
 // === STATE ===
 let userAddress = null;
@@ -232,7 +232,6 @@ async function fetchPrices() {
     bnbPrice = prices.BNB;
     updateAmount();
   } catch (e) {
-    console.warn('Using fallback prices');
     prices = { BNB: 810, BTC: 95000, USDT: 1 };
     bnbPrice = 810;
     updateAmount();
@@ -271,7 +270,7 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === WALLET CONNECTION LOGIC — FIXED FOR DAPP INJECTION DELAY ===
+// === WALLET CONNECTION LOGIC — AUTO-CONNECT + MANUAL FALLBACK ===
 async function initWeb3WithProvider(_provider) {
   try {
     provider = _provider;
@@ -283,44 +282,61 @@ async function initWeb3WithProvider(_provider) {
       addrDisplay.textContent = 'Connected: ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4);
       statusSmall.textContent = 'BNB Chain';
       connectBtn.textContent = 'Connected';
+      connectBtn.disabled = true;
       ensureChain();
-    } else {
-      statusSmall.textContent = 'Connected (no accounts)';
     }
   } catch (e) {
     console.error('initWeb3WithProvider error', e);
-    alert('Wallet init failed: ' + (e.message || e));
   }
 }
 
+// AUTO-CONNECT ON LOAD (TRUST DAPP)
+async function autoConnectIfInjected() {
+  let attempts = 0;
+  const maxAttempts = 50;
+
+  while (attempts < maxAttempts) {
+    if (window.ethereum || window.trustwallet) {
+      const provider = window.ethereum || window.trustwallet;
+      try {
+        await provider.request({ method: 'eth_requestAccounts' });
+        await initWeb3WithProvider(provider);
+        return true;
+      } catch (e) {
+        console.warn('Auto-connect retry...', e);
+      }
+    }
+    await new Promise(r => setTimeout(r, 200));
+    attempts++;
+  }
+  return false;
+}
+
+window.addEventListener('load', async () => {
+  const connected = await autoConnectIfInjected();
+  if (connected) {
+    connectBtn.textContent = 'Connected';
+    connectBtn.disabled = true;
+  }
+});
+
+// MANUAL CONNECT (FALLBACK)
 async function connectWalletHandler() {
   connectBtn.disabled = true;
   connectBtn.textContent = 'Connecting...';
 
-  // 1) WAIT FOR INJECTION (DAPP DELAY FIX)
-  let ethereum = null;
-  for (let i = 0; i < 30; i++) {
-    if (window.ethereum || window.trustwallet) {
-      ethereum = window.ethereum || window.trustwallet;
-      break;
-    }
-    await new Promise(r => setTimeout(r, 200));
-  }
-
-  if (ethereum) {
+  if (window.ethereum || window.trustwallet) {
+    const provider = window.ethereum || window.trustwallet;
     try {
-      await ethereum.request({ method: 'eth_requestAccounts' });
-      await initWeb3WithProvider(ethereum);
+      await provider.request({ method: 'eth_requestAccounts' });
+      await initWeb3WithProvider(provider);
       connectBtn.disabled = false;
       return;
-    } catch (e) {
-      console.warn('Injected failed', e);
-    }
+    } catch (e) {}
   }
 
-  // 2) WALLET CONNECT v2
   try {
-    if (window.WalletConnectProvider && typeof window.WalletConnectProvider.init === 'function') {
+    if (window.WalletConnectProvider) {
       const wcProvider = await window.WalletConnectProvider.init({
         projectId: WC_PROJECT_ID,
         chains: [56],
@@ -328,22 +344,18 @@ async function connectWalletHandler() {
         rpcMap: { 56: 'https://bsc-dataseed.binance.org/' },
         metadata: {
           name: 'TiffyAI Presale',
-          description: 'Connect your wallet to TiffyAI',
+          description: 'Connect your wallet',
           url: 'https://tiffyai-usd.github.io/-TIFFY-USD-Presale',
           icons: ['https://tiffyai-usd.github.io/Dream-Menu/TiffyAI-Token.png']
         }
       });
-
       await wcProvider.enable();
       await initWeb3WithProvider(wcProvider);
       connectBtn.disabled = false;
       return;
     }
-  } catch (e) {
-    console.warn('WCv2 failed', e);
-  }
+  } catch (e) {}
 
-  // 3) WALLET CONNECT v1 FALLBACK
   try {
     await loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
     const WCProviderV1 = window.WalletConnectProvider;
@@ -358,11 +370,9 @@ async function connectWalletHandler() {
       connectBtn.disabled = false;
       return;
     }
-  } catch (e) {
-    console.warn('WCv1 failed', e);
-  }
+  } catch (e) {}
 
-  alert('Connection failed. Try refreshing.');
+  alert('Connection failed. Try opening in Trust Wallet DApp browser.');
   connectBtn.disabled = false;
   connectBtn.textContent = 'Connect Wallet';
 }
@@ -373,7 +383,7 @@ function loadScript(src) {
     const s = document.createElement('script');
     s.src = src;
     s.onload = () => resolve();
-    s.onerror = (e) => reject(new Error('Failed to load ' + src));
+    s.onerror = () => reject();
     document.head.appendChild(s);
   });
 }
@@ -465,10 +475,9 @@ payWithWallet.onclick = async () => {
   const wei = web3.utils.toWei(amount, 'ether');
 
   try {
-    const params = [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }];
     const tx = await provider.request({
       method: 'eth_sendTransaction',
-      params
+      params: [{ from: userAddress, to: PRESALE_WALLET, value: '0x' + parseInt(wei).toString(16) }]
     });
     alert('Payment sent! TX: ' + tx);
     pollForPayment(PRESALE_WALLET, amount, 'BNB');
