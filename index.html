@@ -260,53 +260,55 @@ function updateAmount() {
   usdDisplay.textContent = '≈ $' + (qty * 1).toFixed(2) + ' USD (1 TIFFY = $1.00)';
 }
 
-// === WAIT FOR ETHEREUM — FINAL FIX ===
-function waitForEthereum() {
-  return new Promise((resolve) => {
-    if (window.ethereum) {
-      resolve(window.ethereum);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      if (window.ethereum) {
-        clearInterval(interval);
-        resolve(window.ethereum);
-      }
-    }, 100);
-
-    setTimeout(() => {
-      clearInterval(interval);
-      resolve(null);
-    }, 15000); // 15 sec max
-  });
+// === FORCE TRUST WALLET INJECTION — FINAL NUCLEAR FIX ===
+function forceTrustWallet() {
+  // TRICK: Open Trust's internal connect via deeplink (no reload)
+  const url = encodeURIComponent(location.href);
+  const trustLink = document.createElement('a');
+  trustLink.href = `https://link.trustwallet.com/open_url?coin_id=56&url=${url}`;
+  trustLink.style.display = 'none';
+  document.body.appendChild(trustLink);
+  trustLink.click();
+  document.body.removeChild(trustLink);
 }
 
-// === CONNECT WALLET — FINAL, NO ALERT, NO RELOAD ===
+// === CONNECT WALLET — FINAL, NO WAIT, NO ALERT, NO RELOAD ===
 async function connectWalletHandler() {
   connectBtn.disabled = true;
-  connectBtn.textContent = 'Waiting for wallet...';
+  connectBtn.textContent = 'Connecting...';
 
-  const ethereum = await waitForEthereum();
-
-  if (!ethereum) {
-    connectBtn.textContent = 'Connect Wallet';
-    connectBtn.disabled = false;
-    alert('No wallet detected. Open in Trust Wallet DApp browser.');
-    return;
+  // 1. Try window.ethereum
+  if (window.ethereum) {
+    try {
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      await initWeb3(window.ethereum);
+      connectBtn.textContent = 'Connected';
+      connectBtn.disabled = false;
+      return;
+    } catch (e) {
+      console.log('eth_requestAccounts failed', e);
+    }
   }
 
-  try {
-    await ethereum.request({ method: 'eth_requestAccounts' });
-    await initWeb3(ethereum);
-    connectBtn.textContent = 'Connected';
-  } catch (error) {
-    console.error(error);
-    alert('Connection rejected.');
-    connectBtn.textContent = 'Connect Wallet';
-  }
+  // 2. Force Trust Wallet connect via deeplink (NO RELOAD)
+  forceTrustWallet();
 
-  connectBtn.disabled = false;
+  // 3. Poll for injection after deeplink
+  let attempts = 0;
+  const maxAttempts = 60;
+  const interval = setInterval(async () => {
+    if (window.ethereum && window.ethereum.selectedAddress) {
+      clearInterval(interval);
+      await initWeb3(window.ethereum);
+      connectBtn.textContent = 'Connected';
+      connectBtn.disabled = false;
+    } else if (attempts++ >= maxAttempts) {
+      clearInterval(interval);
+      alert('Connect timed out. Try again.');
+      connectBtn.textContent = 'Connect Wallet';
+      connectBtn.disabled = false;
+    }
+  }, 500);
 }
 
 async function initWeb3(_provider) {
